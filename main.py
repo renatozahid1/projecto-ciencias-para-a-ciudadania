@@ -405,13 +405,16 @@ def crear_chat():
     if chat_key not in chats_db:
         oferta = next((o for o in ofertas if o["id"] == job_id), None)
         emp_nombre = oferta["empresa"] if oferta else "Empresa"
+        titulo_puesto = oferta["titulo"] if oferta else "el puesto"
         
-        # Mensaje automático de bienvenida al hacer match
+        # Mensaje automático de bienvenida al hacer match (variables separadas para evitar conflictos de comillas)
+        texto_bienvenida = f"¡Hola! Vimos que te interesó nuestra oferta para {titulo_puesto}. ¿Tienes alguna consulta?"
+        
         chats_db[chat_key] = [
             {
                 "emisor": "empleador",
                 "nombre_emisor": emp_nombre,
-                "texto": f"¡Hola! Vimos que te interesó nuestra oferta para {oferta['titulo'] if oferta else 'el puesto'}. ¿Tienes alguna consulta?",
+                "texto": texto_bienvenida,
                 "hora": datetime.now().strftime("%H:%M")
             }
         ]
@@ -427,7 +430,4 @@ def mis_chats():
             oferta = next((o for o in ofertas if o["id"] == job_id), None)
             if oferta and msgs:
                 ultimo = msgs[-1]
-                mis.append({
-                    "job_id": job_id,
-                    "titulo_empleo": oferta["titulo"],
-                    "empresa": oferta["empresa"
+                mis.a
