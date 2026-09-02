@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 app = Flask(__name__)
-# Clave secreta necesaria para mantener sesiones independientes por dispositivo
+# Clave secreta para mantener sesiones independientes por dispositivo
 app.secret_key = "palapp_secret_key_super_segura_123"
 
 # Base de datos en memoria indexada por ID de dispositivo/usuario
@@ -193,24 +193,22 @@ HTML_CHATS_LIST = f"""
         let chats = await r.json();
         let cont = document.getElementById('chats-list');
         if(chats.length === 0){{
-            cont.innerHTML = '<div class="p-8 text-center text-gray-500 text-xs"><p class="text-2xl mb-2">📭</p>No tienes chats activos.<br>Usa el buscador para dar Me Gusta (💚) a empleos.</div>';
+            cont.innerHTML = '<div class="p-8 text-center text-gray-500 text-xs"><p class="text-2xl mb-2">📭</p>No tienes chats activos.<br>Usa el buscador para dar Me Gusta a empleos.</div>';
             return;
         }}
-        cont.innerHTML = chats.map(c=> `
-            <a href="/chat/${{c.job_id}}" class="flex items-center gap-3 p-4 hover:bg-gray-900 transition">
-                <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center font-bold text-amber-500 text-lg">
-                    🏢
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-baseline">
-                        <h4 class="font-bold text-sm text-white truncate">${{c.titulo_empleo}}</h4>
-                        <span class="text-[10px] text-gray-500">${{c.ultima_hora}}</span>
-                    </div>
-                    <p class="text-xs text-gray-400 truncate">${{c.empresa}}</p>
-                    <p class="text-xs text-gray-500 truncate mt-0.5">${{c.ultimo_msg}}</p>
-                </div>
-            </a>
-        `).join('');
+        cont.innerHTML = chats.map(c => 
+            '<a href="/chat/' + c.job_id + '" class="flex items-center gap-3 p-4 hover:bg-gray-900 transition">' +
+                '<div class="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center font-bold text-amber-500 text-lg">🏢</div>' +
+                '<div class="flex-1 min-w-0">' +
+                    '<div class="flex justify-between items-baseline">' +
+                        '<h4 class="font-bold text-sm text-white truncate">' + c.titulo_empleo + '</h4>' +
+                        '<span class="text-[10px] text-gray-500">' + c.ultima_hora + '</span>' +
+                    '</div>' +
+                    '<p class="text-xs text-gray-400 truncate">' + c.empresa + '</p>' +
+                    '<p class="text-xs text-gray-500 truncate mt-0.5">' + c.ultimo_msg + '</p>' +
+                '</div>' +
+            '</a>'
+        ).join('');
     }}
     loadChats();
     </script>
@@ -246,15 +244,15 @@ HTML_CHAT_ROOM = f"""
         let r = await fetch('/api/chat/' + jobId + '/mensajes');
         let d = await r.json();
         let c = document.getElementById('msgs');
-        c.innerHTML = d.map(m=> `
-            <div class="flex flex-col ${{m.emisor==='candidato'?'items-end':'items-start'}}">
-                <div class="max-w-[80%] rounded-2xl px-4 py-2 text-sm ${{m.emisor==='candidato'?'bg-amber-500 text-gray-950 font-medium rounded-br-none':'bg-gray-800 text-white rounded-bl-none'}}">
-                    <p class="text-[9px] opacity-60 mb-0.5">${{m.nombre_emisor}}</p>
-                    <p>${{m.texto}}</p>
-                </div>
-                <span class="text-[9px] text-gray-500 mt-0.5 px-1">${{m.hora}}</span>
-            </div>
-        `).join('');
+        c.innerHTML = d.map(m => 
+            '<div class="flex flex-col ' + (m.emisor==='candidato'?'items-end':'items-start') + '">' +
+                '<div class="max-w-[80%] rounded-2xl px-4 py-2 text-sm ' + (m.emisor==='candidato'?'bg-amber-500 text-gray-950 font-medium rounded-br-none':'bg-gray-800 text-white rounded-bl-none') + '">' +
+                    '<p class="text-[9px] opacity-60 mb-0.5">' + m.nombre_emisor + '</p>' +
+                    '<p>' + m.texto + '</p>' +
+                '</div>' +
+                '<span class="text-[9px] text-gray-500 mt-0.5 px-1">' + m.hora + '</span>' +
+            '</div>'
+        ).join('');
         c.scrollTop = c.scrollHeight;
     }}
     async function send(e){{
@@ -371,48 +369,6 @@ def candidato_perfil():
 def vista_chats():
     obtener_o_crear_usuario()
     return render_template_string(HTML_CHATS_LIST)
-HTML_CHATS_LIST = f"""
-<!DOCTYPE html>
-<html lang="es">
-{HTML_HEAD}
-<body class="bg-gray-950 text-white min-h-screen pb-20">
-    <div class="p-4 border-b border-gray-800 bg-gray-900">
-        <h1 class="font-bold text-lg">💬 Mensajes</h1>
-        <p class="text-xs text-gray-400">Conversaciones activas con empresas</p>
-    </div>
-    
-    <div id="chats-list" class="divide-y divide-gray-800">
-        <p class="p-4 text-xs text-gray-500">Cargando chats...</p>
-    </div>
-    {NAV_BAR}
-    <script>
-    async function loadChats(){{
-        let r = await fetch('/api/mis-chats');
-        let chats = await r.json();
-        let cont = document.getElementById('chats-list');
-        if(chats.length === 0){{
-            cont.innerHTML = '<div class="p-8 text-center text-gray-500 text-xs"><p class="text-2xl mb-2">📭</p>No tienes chats activos.<br>Usa el buscador para dar Me Gusta a empleos.</div>';
-            return;
-        }}
-        cont.innerHTML = chats.map(c => 
-            '<a href="/chat/' + c.job_id + '" class="flex items-center gap-3 p-4 hover:bg-gray-900 transition">' +
-                '<div class="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center font-bold text-amber-500 text-lg">🏢</div>' +
-                '<div class="flex-1 min-w-0">' +
-                    '<div class="flex justify-between items-baseline">' +
-                        '<h4 class="font-bold text-sm text-white truncate">' + c.titulo_empleo + '</h4>' +
-                        '<span class="text-[10px] text-gray-500">' + c.ultima_hora + '</span>' +
-                    '</div>' +
-                    '<p class="text-xs text-gray-400 truncate">' + c.empresa + '</p>' +
-                    '<p class="text-xs text-gray-500 truncate mt-0.5">' + c.ultimo_msg + '</p>' +
-                '</div>' +
-            '</a>'
-        ).join('');
-    }}
-    loadChats();
-    </script>
-</body>
-</html>
-"""
 
 @app.route("/chat/<job_id>")
 def vista_chat_room(job_id):
@@ -474,5 +430,4 @@ def mis_chats():
                 mis.append({
                     "job_id": job_id,
                     "titulo_empleo": oferta["titulo"],
-                    "empresa": oferta["empresa"],
-                    "ultimo_msg": ultimo["te
+                    "empresa": oferta["empresa"
