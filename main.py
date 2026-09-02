@@ -430,4 +430,101 @@ def mis_chats():
             oferta = next((o for o in ofertas if o["id"] == job_id), None)
             if oferta and msgs:
                 ultimo = msgs[-1]
-                mis.a
+                mis.append({
+                    "job_id": job_id,
+                    "titulo_empleo": oferta["titulo"],
+                    "empresa": oferta["empresa"],
+                    "ultimo_msg": ultimo["texto"],
+                    "ultima_hora": ultimo["hora"]
+                })
+    return jsonify(mis)
+
+@app.route("/api/chat/<job_id>/mensajes", methods=["GET"])
+def get_mensajes(job_id):
+    uid = obtener_o_crear_usuario()
+    chat_key = f"{uid}_{job_id}"
+    return jsonify(chats_db.get(chat_key, []))
+
+@app.route("/api/chat/<job_id>/mensajes", methods=["POST"])
+def post_mensaje(job_id):
+    uid = obtener_o_crear_usuario()
+    chat_key = f"{uid}_{job_id}"
+    data = request.json or {}
+    texto = (data.get("texto") or "").strip()
+    if not texto:
+        return jsonify({"status": "error", "msg": "Mensaje vacío"}), 400
+
+    cand = candidatos_db[uid]
+    if chat_key not in chats_db:
+        chats_db[chat_key] = []
+
+    chats_db[chat_key].append({
+        "emisor": "candidato",
+        "nombre_emisor": cand["nombre"],
+        "texto": texto,
+        "hora": datetime.now().strftime("%H:%M")
+    })
+    return jsonify({"status": "ok"})
+
+@app.route("/api/perfil-candidato", methods=["POST"])
+def actualizar_perfil_candidato():
+    uid = obtener_o_crear_usuario()
+    data = request.json or {}
+    cand = candidatos_db[uid]
+
+    if data.get("nombre"):
+        cand["nombre"] = data["nombre"]
+
+    try:
+        cand["edad"] = int(data.get("edad", cand["edad"]))
+    except (ValueError, TypeError):
+        pass
+
+    try:
+        cand["expectativa_renta"] = int(data.get("expectativa_renta", cand["expectativa_renta"]))
+    except (ValueError, TypeError):
+        pass
+
+    habilidades_raw = data.get("habilidades", "")
+    if habilidades_raw:
+        cand["habilidades"] = [h.strip() for h in habilidades_raw.split(",") if h.strip()]
+
+    return jsonify({"status": "ok"})
+
+@app.route("/api/perfil-empleador", methods=["POST"])
+def actualizar_perfil_empleador():
+    data = request.json or {}
+    perfil_empleador["nombre_empresa"] = data.get("nombre_empresa", perfil_empleador["nombre_empresa"])
+    perfil_empleador["rut_empresa"] = data.get("rut_empresa", perfil_empleador["rut_empresa"])
+    perfil_empleador["contacto"] = data.get("contacto", perfil_empleador["contacto"])
+    return jsonify({"status": "ok"})
+
+@app.route("/api/crear-empleo", methods=["POST"])
+def crear_empleo():
+    data = request.json or {}
+    titulo = (data.get("titulo") or "").strip()
+
+    try:
+        sueldo = int(data.get("sueldo_ofrecido", 0))
+    except (ValueError, TypeError):
+        sueldo = 0
+
+    habilidades_raw = data.get("habilidades", "")
+    habilidades = [h.strip() for h in habilidades_raw.split(",") if h.strip()]
+
+    nuevo_id = f"job_{uuid.uuid4().hex[:6]}"
+    ofertas.append({
+        "id": nuevo_id,
+        "titulo": titulo,
+        "empresa": perfil_empleador["nombre_empresa"],
+        "edad_minima": 18,
+        "ubicacion": perfil_empleador["ubicacion"],
+        "habilidades_requeridas": habilidades,
+        "sueldo_ofrecido": sueldo
+    })
+    return jsonify({"status": "ok", "id": nuevo_id})
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
