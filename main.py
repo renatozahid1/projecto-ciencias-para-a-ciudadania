@@ -12,6 +12,7 @@ users_db = {
         "pwd": "123", 
         "role": "empleador", 
         "nombre": "Barbería Barber Moon", 
+        "descripcion": "Somos una barbería con más de 8 años de trayectoria en el centro de la ciudad. Buscamos el mejor talento en corte tradicional y moderno.",
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
         "contacto": "+56912345678",
         "mensaje_bienvenida": "¡Hola! Vi tu perfil en PalApp y nos encantaría agendar una entrevista.",
@@ -21,6 +22,7 @@ users_db = {
         "pwd": "123", 
         "role": "candidato", 
         "nombre": "Juan Pérez", 
+        "descripcion": "Barbero profesional apasionado por el corte urbano, degradados y perfilado de barba. 3 años de experiencia en barberías concurridas.",
         "edad": 24,
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
         "expectativa_renta": 600000,
@@ -35,6 +37,7 @@ ofertas_db = [
         "empleador_id": "barbermoon", 
         "titulo": "Barbero / Estilista Senior",
         "empresa": "Barbería Barber Moon", 
+        "descripcion": "Se busca barbero con experiencia comprobable en degradados, perfilado de barba y excelente trato con el cliente.",
         "edad_minima": 20,
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"},
         "habilidades_requeridas": ["corte_cabello", "atencion_cliente"],
@@ -47,17 +50,17 @@ ofertas_db = [
 swipes_db = {}
 chats_db = {}
 
-# --- LÓGICA DE MATCH (ALGORITMO ORIGINAL) ---
-def calcular_match(cand, emp):
-    if cand.get("edad", 0) < emp.get("edad_minima", 18):
+# --- LÓGICA DE MATCH ---
+def calcular_match(cand, emp_oferta):
+    if cand.get("edad", 0) < emp_oferta.get("edad_minima", 18):
         return 0.0
     
     cand_skills = set(cand.get("habilidades", []))
-    req_skills = set(emp.get("habilidades_requeridas", []))
+    req_skills = set(emp_oferta.get("habilidades_requeridas", []))
     s_skills = len(cand_skills.intersection(req_skills)) / len(req_skills) if req_skills else 1.0
     
     cand_loc = cand.get("ubicacion", {"lat": -33.4489, "lon": -70.6693})
-    emp_loc = emp.get("ubicacion", {"lat": -33.4489, "lon": -70.6693})
+    emp_loc = emp_oferta.get("ubicacion", {"lat": -33.4489, "lon": -70.6693})
     
     dlat = math.radians(emp_loc.get("lat", -33.4489) - cand_loc.get("lat", -33.4489))
     dlon = math.radians(emp_loc.get("lon", -70.6693) - cand_loc.get("lon", -70.6693))
@@ -65,14 +68,16 @@ def calcular_match(cand, emp):
     dist_km = 6371.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     s_dist = math.exp(-0.08 * dist_km)
     
-    sueldo_emp = emp.get("sueldo_ofrecido", 0)
+    sueldo_emp = emp_oferta.get("sueldo_ofrecido", 0)
     exp_cand = cand.get("expectativa_renta", 1) or 1
     s_sal = 1.0 if sueldo_emp >= exp_cand else (sueldo_emp / exp_cand)
     
     return round((0.45 * s_skills + 0.35 * s_dist + 0.20 * s_sal) * 100, 1)
 
-def check_match_mutuo(cand_id, emp_id):
-    c_likes_e = swipes_db.get((cand_id, emp_id)) == "like"
+def check_match_mutuo(cand_id, emp_id, job_id=None):
+    # Verifica si el candidato dio like a alguna oferta del empleador o a una en específico
+    mis_ofertas_ids = [o["id"] for o in ofertas_db if o["empleador_id"] == emp_id]
+    c_likes_e = any(swipes_db.get((cand_id, j_id)) == "like" for j_id in mis_ofertas_ids)
     e_likes_c = swipes_db.get((emp_id, cand_id)) == "like"
     
     if c_likes_e and e_likes_c:
@@ -111,6 +116,7 @@ HTML_HEAD = """
         .card-drag { transition: transform 0.2s ease, opacity 0.2s ease; cursor: grab; }
         .card-drag:active { cursor: grabbing; transition: none; }
         .match-overlay { display: none; background: rgba(0,0,0,0.92); z-index: 100; }
+        .modal-bg { display: none; background: rgba(0,0,0,0.85); z-index: 90; }
     </style>
 </head>
 """
@@ -125,7 +131,6 @@ HTML_AUTH = f"""
     </div>
 
     <div class="w-full max-w-sm bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-        <!-- Selector de Pestañas -->
         <div class="flex border-b border-gray-800 mb-5">
             <button id="tab-login-btn" onclick="switchTab('login')" class="flex-1 py-2 text-center text-sm font-bold border-b-2 border-amber-500 text-amber-500">Ingresar</button>
             <button id="tab-register-btn" onclick="switchTab('register')" class="flex-1 py-2 text-center text-sm font-bold border-b-2 border-transparent text-gray-400 hover:text-white">Registrarse</button>
@@ -153,9 +158,17 @@ HTML_AUTH = f"""
             <input id="reg-nombre" placeholder="Nombre completo o Empresa" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             <input id="reg-pwd" type="password" placeholder="Contraseña" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             
+            <textarea id="reg-desc" placeholder="Descripción / Biografía breve" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
+
+            <div class="space-y-1">
+                <label class="text-[10px] text-gray-400 font-bold block">Foto de perfil (Subir archivo o pegar enlace)</label>
+                <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'reg-foto-val')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
+                <input id="reg-foto-val" placeholder="O pega enlace de imagen (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
+            </div>
+
             <div class="grid grid-cols-2 gap-2">
-                <input id="reg-region" placeholder="Región (ej: Valparaíso)" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
-                <input id="reg-ciudad" placeholder="Ciudad (ej: Viña del Mar)" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-region" placeholder="Región" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-ciudad" placeholder="Ciudad" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
             <!-- Campos dinámicos Candidato -->
@@ -164,13 +177,13 @@ HTML_AUTH = f"""
                     <input id="reg-edad" type="number" placeholder="Edad" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                     <input id="reg-renta" type="number" placeholder="Expectativa Renta ($)" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                 </div>
-                <input id="reg-skills" placeholder="Habilidades (separadas por coma)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-skills" placeholder="Habilidades (ej: barberia, atencion)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
             <!-- Campos dinámicos Empleador -->
             <div id="emp-fields" class="space-y-2 hidden">
                 <input id="reg-contacto" placeholder="Teléfono de contacto" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
-                <input id="reg-job-title" placeholder="Título de la oferta (ej: Barbero)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-job-title" placeholder="Título de tu 1° Oferta (ej: Barbero)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                 <input id="reg-job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
@@ -179,6 +192,16 @@ HTML_AUTH = f"""
     </div>
 
     <script>
+    function convertFileToBase64(fileInput, targetId) {{
+        const file = fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {{
+            document.getElementById(targetId).value = e.target.result;
+        }};
+        reader.readAsDataURL(file);
+    }}
+
     function switchTab(tab) {{
         if(tab === 'login') {{
             document.getElementById('loginForm').classList.remove('hidden');
@@ -221,6 +244,8 @@ HTML_AUTH = f"""
             user: document.getElementById('reg-user').value,
             pwd: document.getElementById('reg-pwd').value,
             nombre: document.getElementById('reg-nombre').value,
+            descripcion: document.getElementById('reg-desc').value,
+            foto: document.getElementById('reg-foto-val').value,
             role: role,
             region: document.getElementById('reg-region').value,
             ciudad: document.getElementById('reg-ciudad').value,
@@ -253,9 +278,34 @@ HTML_FEED = f"""
 
     <div class="max-w-sm mx-auto relative h-[65vh]" id="card-container"></div>
 
-    <div class="max-w-sm mx-auto flex justify-center gap-6 mt-6 z-10 relative">
+    <div class="max-w-sm mx-auto flex justify-center gap-6 mt-4 z-10 relative items-center">
         <button onclick="action('pass')" class="w-16 h-16 bg-gray-900 border-2 border-red-500/50 text-red-500 rounded-full text-3xl shadow-lg hover:bg-red-500/20 transition flex items-center justify-center">❌</button>
+        <button onclick="openProfileModal()" class="w-12 h-12 bg-gray-800 border border-gray-700 text-amber-400 rounded-full text-xl shadow-md hover:bg-gray-700 transition flex items-center justify-center">👁️</button>
         <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 transition flex items-center justify-center">💚</button>
+    </div>
+
+    <!-- Modal Ver Perfil Completo -->
+    <div id="profile-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto">
+            <button onclick="closeProfileModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
+            <div class="text-center mb-4">
+                <img id="m-foto" src="" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                <h3 id="m-nombre" class="text-xl font-bold"></h3>
+                <p id="m-subtitulo" class="text-xs text-amber-400 font-medium"></p>
+                <p id="m-ubicacion" class="text-xs text-gray-400 mt-0.5"></p>
+            </div>
+            
+            <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
+                <div>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
+                    <p id="m-desc" class="text-gray-200 mt-1 leading-relaxed text-xs bg-gray-950 p-3 rounded-xl border border-gray-800"></p>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-1">Habilidades / Requisitos</h4>
+                    <div id="m-tags" class="flex flex-wrap gap-1"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Match Overlay -->
@@ -286,7 +336,8 @@ HTML_FEED = f"""
     function renderCard() {{
         const container = document.getElementById('card-container');
         if (queue.length === 0) {{
-            container.innerHTML = '<div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6"><span class="text-5xl mb-4">📭</span><h3 class="font-bold text-lg">No hay más candidatos u ofertas por ahora</h3></div>';
+            container.innerHTML = '<div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6"><span class="text-5xl mb-4">📭</span><h3 class="font-bold text-lg">No hay más publicaciones u ofertas por ahora</h3></div>';
+            currentItem = null;
             return;
         }}
 
@@ -294,15 +345,18 @@ HTML_FEED = f"""
         const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800/80 backdrop-blur-sm text-gray-200 text-[11px] px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
         const sueldo_texto = currentItem.sueldo_ofrecido ? `$${{currentItem.sueldo_ofrecido.toLocaleString('es-CL')}}` : (currentItem.expectativa_renta ? `$${{currentItem.expectativa_renta.toLocaleString('es-CL')}} (Exp)` : '');
         const loc_texto = currentItem.ubicacion ? `${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
+        const es_solicitud = currentItem.postulado_a ? `<div class="bg-amber-500 text-gray-950 text-[11px] font-extrabold px-3 py-1 rounded-full mb-2 inline-block shadow-md">⚡ Postuló a tu oferta: ${{currentItem.postulado_a}}</div>` : '';
 
         container.innerHTML = `
             <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{currentItem.foto}}')">
                 <div class="mt-auto p-5 relative z-10">
+                    ${{es_solicitud}}
                     <div class="flex justify-between items-end mb-2">
                         <span class="bg-amber-500 text-gray-950 text-xs px-3 py-1 rounded-full font-extrabold shadow-lg">${{currentItem.match_score}}% Match</span>
                     </div>
                     <h2 class="text-2xl font-extrabold text-white mb-1">${{currentItem.titulo || currentItem.nombre}} <span class="text-lg font-normal text-gray-300">${{currentItem.edad ? currentItem.edad + ' años' : ''}}</span></h2>
                     <p class="text-amber-400 font-medium text-sm mb-1">${{currentItem.empresa || currentItem.nombre}} | ${{sueldo_texto}}</p>
+                    <p class="text-gray-300 text-xs mb-2 line-clamp-2">${{currentItem.descripcion || 'Sin descripción.'}}</p>
                     <p class="text-gray-400 text-xs mb-3">📍 ${{loc_texto}}</p>
                     <div class="flex flex-wrap gap-1.5">${{tags}}</div>
                 </div>
@@ -311,6 +365,24 @@ HTML_FEED = f"""
         
         cardEl = document.getElementById('swipe-card');
         setupGestures(cardEl);
+    }}
+
+    function openProfileModal() {{
+        if(!currentItem) return;
+        document.getElementById('m-foto').src = currentItem.foto;
+        document.getElementById('m-nombre').innerText = currentItem.titulo || currentItem.nombre;
+        document.getElementById('m-subtitulo').innerText = (currentItem.empresa ? currentItem.empresa + ' | ' : '') + (currentItem.sueldo_ofrecido ? '$' + currentItem.sueldo_ofrecido.toLocaleString('es-CL') : (currentItem.expectativa_renta ? '$' + currentItem.expectativa_renta.toLocaleString('es-CL') : ''));
+        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${{currentItem.ubicacion.ciudad}}, ${{currentItem.ubicacion.region}}` : '';
+        document.getElementById('m-desc').innerText = currentItem.descripcion || 'Sin descripción agregada.';
+        
+        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-amber-400 text-xs px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
+        document.getElementById('m-tags').innerHTML = tags || '<span class="text-gray-500 text-xs">Sin habilidades listadas</span>';
+        
+        document.getElementById('profile-modal').style.display = 'flex';
+    }}
+
+    function closeProfileModal() {{
+        document.getElementById('profile-modal').style.display = 'none';
     }}
 
     function setupGestures(el) {{
@@ -338,6 +410,7 @@ HTML_FEED = f"""
 
     async function action(type) {{
         if (!currentItem) return;
+        closeProfileModal();
         if(cardEl) {{
             cardEl.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
             const offset = type === 'pass' ? -400 : 400;
@@ -352,7 +425,7 @@ HTML_FEED = f"""
             method: 'POST', headers: {{'Content-Type': 'application/json'}},
             body: JSON.stringify({{target_id: target_id, type: type}})
         }});
-                let res = await r.json();
+        let res = await r.json();
         
         if (res.is_match) {{
             document.getElementById('match-img').src = currentItem.foto;
@@ -391,6 +464,7 @@ def register():
     nombre = data.get("nombre", u).strip()
     region = data.get("region", "Región Metropolitana").strip()
     ciudad = data.get("ciudad", "Santiago").strip()
+    foto = data.get("foto") or f"https://ui-avatars.com/api/?name={nombre.replace(' ', '+')}&background=f59e0b&color=fff"
 
     if not u or not p:
         return jsonify({"status": "error", "msg": "Complete usuario y contraseña"}), 400
@@ -399,8 +473,9 @@ def register():
 
     users_db[u] = {
         "pwd": p, "role": role, "nombre": nombre,
+        "descripcion": data.get("descripcion", ""),
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
-        "foto": f"https://ui-avatars.com/api/?name={nombre.replace(' ', '+')}&background=f59e0b&color=fff",
+        "foto": foto,
         "edad": int(data.get("edad") or 22) if role == "candidato" else None,
         "expectativa_renta": int(data.get("expectativa_renta") or 500000) if role == "candidato" else None,
         "habilidades": [h.strip() for h in data.get("habilidades", "").split(",") if h.strip()] if role == "candidato" else [],
@@ -414,11 +489,12 @@ def register():
             "empleador_id": u,
             "titulo": data.get("titulo_oferta") or "Puesto Vacante",
             "empresa": nombre,
+            "descripcion": data.get("descripcion", "Únete a nuestro equipo de trabajo."),
             "edad_minima": 18,
             "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
             "habilidades_requeridas": ["atencion_cliente"],
             "sueldo_ofrecido": int(data.get("sueldo_ofrecido") or 600000),
-            "foto": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&h=300&fit=crop"
+            "foto": foto
         })
 
     session["user_id"] = u
@@ -439,9 +515,8 @@ def get_feed():
     
     if user["role"] == "candidato":
         for o in ofertas_db:
-            if (u, o["empleador_id"]) not in swipes_db:
+            if (u, o["id"]) not in swipes_db:
                 item = dict(o)
-                item["id"] = o["empleador_id"]
                 item["match_score"] = calcular_match(user, o)
                 res.append(item)
     else:
@@ -453,9 +528,18 @@ def get_feed():
                 item = dict(cand_data)
                 item["id"] = cand_id
                 item["match_score"] = calcular_match(cand_data, oferta_base)
+                
+                # Buscar si el candidato postuló a alguna de las ofertas de esta empresa
+                postulado_job = None
+                for o in mis_ofertas:
+                    if swipes_db.get((cand_id, o["id"])) == "like":
+                        postulado_job = o["titulo"]
+                        break
+                item["postulado_a"] = postulado_job
+                
                 res.append(item)
                 
-    res.sort(key=lambda x: x["match_score"], reverse=True)
+    res.sort(key=lambda x: (1 if x.get("postulado_a") else 0, x["match_score"]), reverse=True)
     return jsonify(res)
 
 @app.route("/api/swipe", methods=["POST"])
@@ -471,11 +555,19 @@ def handle_swipe():
         user_role = users_db[u]["role"]
         cand_id = u if user_role == "candidato" else target
         emp_id = target if user_role == "candidato" else u
+        
+        # Obtener ID del empleador si la oferta fue el target
+        if user_role == "candidato":
+            for o in ofertas_db:
+                if o["id"] == target:
+                    emp_id = o["empleador_id"]
+                    break
+                    
         is_match = check_match_mutuo(cand_id, emp_id)
 
     return jsonify({"status": "ok", "is_match": is_match})
 
-# --- SISTEMA DE CHAT EN TIEMPO REAL ---
+# --- SISTEMA DE CHAT ---
 @app.route("/chats")
 def vista_chats():
     u = session.get("user_id")
@@ -509,15 +601,37 @@ def chat_room(target_id):
     otro_user = users_db[target_id]
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen flex flex-col">
-        <div class="bg-gray-900 p-3 flex items-center border-b border-gray-800 sticky top-0 z-50">
-            <button onclick="location.href='/chats'" class="mr-3 text-xl hover:text-amber-500">⬅</button>
-            <img src="{otro_user['foto']}" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
-            <div>
-                <h2 class="font-bold text-sm">{otro_user['nombre']}</h2>
-                <span class="text-[10px] text-green-400">● En línea</span>
+        <div class="bg-gray-900 p-3 flex items-center justify-between border-b border-gray-800 sticky top-0 z-50">
+            <div class="flex items-center">
+                <button onclick="location.href='/chats'" class="mr-3 text-xl hover:text-amber-500">⬅</button>
+                <img src="{otro_user['foto']}" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
+                <div>
+                    <h2 class="font-bold text-sm">{otro_user['nombre']}</h2>
+                    <span class="text-[10px] text-green-400">● En línea</span>
+                </div>
             </div>
+            <button onclick="openChatProfile()" class="text-xs bg-gray-800 border border-gray-700 text-amber-400 px-3 py-1.5 rounded-lg hover:bg-gray-700 font-bold">👁️ Ver Perfil</button>
         </div>
         <div id="chat-box" class="flex-1 p-4 overflow-y-auto pb-24 space-y-3"></div>
+
+        <!-- Modal Ver Perfil desde Chat -->
+        <div id="chat-profile-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
+            <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto">
+                <button onclick="closeChatProfile()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
+                <div class="text-center mb-4">
+                    <img src="{otro_user['foto']}" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <h3 class="text-xl font-bold">{otro_user['nombre']}</h3>
+                    <p class="text-xs text-amber-400 font-medium">{otro_user.get('contacto', '')}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">📍 {otro_user.get('ubicacion', {}).get('ciudad', '')}, {otro_user.get('ubicacion', {}).get('region', '')}</p>
+                </div>
+                <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
+                        <p class="text-gray-200 mt-1 leading-relaxed text-xs bg-gray-950 p-3 rounded-xl border border-gray-800">{otro_user.get('descripcion', 'Sin descripción.')}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <form onsubmit="sendMessage(event)" class="p-3 bg-gray-900 fixed bottom-0 left-0 right-0 border-t border-gray-800 flex gap-2">
             <input id="msg-input" type="text" placeholder="Escribe un mensaje..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 text-white">
@@ -527,6 +641,9 @@ def chat_room(target_id):
         <script>
             const targetId = "{target_id}";
             const myId = "{u}";
+
+            function openChatProfile() {{ document.getElementById('chat-profile-modal').style.display = 'flex'; }}
+            function closeChatProfile() {{ document.getElementById('chat-profile-modal').style.display = 'none'; }}
             
             async function loadChat() {{
                 let r = await fetch('/api/chat/' + targetId);
@@ -583,7 +700,7 @@ def api_chat(target_id):
     
     return jsonify(chats_db.get(chat_key, []))
 
-# --- PERFIL EDITABLE CON DATOS COMPLETOS ---
+# --- PERFIL Y GESTIÓN DE OFERTAS ---
 @app.route("/perfil")
 def vista_perfil():
     u = session.get("user_id")
@@ -594,8 +711,7 @@ def vista_perfil():
     region_val = loc.get("region", "")
     ciudad_val = loc.get("ciudad", "")
     
-    # Oferta de empleo asociada si es Empleador
-    mi_oferta = next((o for o in ofertas_db if o["empleador_id"] == u), {})
+    mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
 
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen p-4 pb-24">
@@ -605,7 +721,7 @@ def vista_perfil():
                 <a href="/logout" class="text-xs bg-red-500/10 border border-red-500/30 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-500/20 font-bold">Cerrar Sesión</a>
             </div>
 
-            <form onsubmit="saveProfile(event)" class="space-y-4 bg-gray-900 p-5 rounded-2xl border border-gray-800">
+            <form onsubmit="saveProfile(event)" class="space-y-4 bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
                 <div class="text-center mb-4">
                     <img id="avatar-preview" src="{user.get('foto', '')}" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
                     <span class="text-xs text-amber-500 font-bold uppercase tracking-wider">{user['role']}</span>
@@ -617,8 +733,14 @@ def vista_perfil():
                 </div>
 
                 <div>
-                    <label class="text-xs text-gray-400 font-bold">URL Foto de Perfil</label>
-                    <input id="edit-foto" value="{user.get('foto', '')}" onchange="document.getElementById('avatar-preview').src=this.value" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    <label class="text-xs text-gray-400 font-bold">Descripción / Biografía</label>
+                    <textarea id="edit-desc" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">{user.get('descripcion', '')}</textarea>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs text-gray-400 font-bold">Cambiar Foto de Perfil</label>
+                    <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'edit-foto', 'avatar-preview')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
+                    <input id="edit-foto" value="{user.get('foto', '')}" onchange="document.getElementById('avatar-preview').src=this.value" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs mt-1 focus:border-amber-500 outline-none">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -660,31 +782,79 @@ def vista_perfil():
                         <label class="text-xs text-amber-500 font-bold">Mensaje de Bienvenida Automático (Match)</label>
                         <textarea id="edit-welcome" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm mt-1 focus:border-amber-500 outline-none" rows="2">{user.get('mensaje_bienvenida', '')}</textarea>
                     </div>
-
-                    <div class="border-t border-gray-800 pt-3 mt-3">
-                        <h3 class="text-xs font-bold text-amber-400 uppercase mb-2">💼 Datos de la Oferta Pública</h3>
-                        <div>
-                            <label class="text-xs text-gray-400 font-bold">Título del Cargo</label>
-                            <input id="edit-job-title" value="{mi_oferta.get('titulo', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
-                        </div>
-                        <div class="mt-2">
-                            <label class="text-xs text-gray-400 font-bold">Sueldo Ofrecido ($)</label>
-                            <input id="edit-job-sueldo" type="number" value="{mi_oferta.get('sueldo_ofrecido', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
-                        </div>
-                    </div>
                 </div>
 
                 <button type="submit" class="w-full py-3 bg-amber-500 text-gray-950 font-bold rounded-xl hover:bg-amber-400 transition mt-4">Guardar Cambios</button>
                 <p id="save-status" class="text-green-400 text-xs text-center hidden font-bold">¡Perfil actualizado correctamente!</p>
             </form>
+
+            <!-- SECCIÓN PUBLICACIONES DE TRABAJO (SÓLO EMPLEADORES) -->
+            <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-lg font-bold">💼 Mis Ofertas de Trabajo</h2>
+                    <button onclick="toggleNewJobForm()" class="text-xs bg-amber-500 text-gray-950 px-3 py-1.5 rounded-lg font-bold hover:bg-amber-400">+ Nueva Oferta</button>
+                </div>
+
+                <!-- FORMULARIO CREAR NUEVA OFERTA -->
+                <form id="new-job-form" onsubmit="createNewJob(event)" class="bg-gray-900 p-4 rounded-2xl border border-gray-800 space-y-3 hidden">
+                    <h3 class="text-sm font-bold text-amber-500">Crear Nueva Oferta de Trabajo</h3>
+                    <input id="job-title" placeholder="Título del puesto (ej: Barbera/o)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    <textarea id="job-desc" placeholder="Descripción del empleo y funciones" rows="2" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
+                    <input id="job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    <input id="job-skills" placeholder="Habilidades requeridas (separadas por coma)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-400 font-bold">Foto del Puesto / Local</label>
+                        <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'job-foto-val')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
+                        <input id="job-foto-val" placeholder="O pega enlace de imagen (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
+                    </div>
+
+                    <div class="flex gap-2 pt-2">
+                        <button type="submit" class="flex-1 py-2 bg-amber-500 text-gray-950 font-bold rounded-xl text-xs hover:bg-amber-400">Publicar</button>
+                        <button type="button" onclick="toggleNewJobForm()" class="py-2 px-4 bg-gray-800 text-gray-300 font-bold rounded-xl text-xs">Cancelar</button>
+                    </div>
+                </form>
+
+                <!-- LISTA DE OFERTAS EXISTENTES -->
+                <div class="space-y-2">
+                    {''.join([f'''
+                    <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="{o['foto']}" class="w-12 h-12 rounded-lg object-cover border border-gray-700">
+                            <div>
+                                <h4 class="font-bold text-sm">{o['titulo']}</h4>
+                                <p class="text-xs text-amber-400">${o['sueldo_ofrecido']:,}</p>
+                            </div>
+                        </div>
+                        <button onclick="deleteJob('{o['id']}')" class="text-xs text-red-400 hover:text-red-300 p-2">🗑️</button>
+                    </div>
+                    ''' for o in mis_ofertas])}
+                </div>
+            </div>
         </div>
         {NAV_BAR}
 
         <script>
+        function convertFileToBase64(fileInput, targetId, previewImgId) {{
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {{
+                document.getElementById(targetId).value = e.target.result;
+                if(previewImgId) document.getElementById(previewImgId).src = e.target.result;
+            }};
+            reader.readAsDataURL(file);
+        }}
+
+        function toggleNewJobForm() {{
+            document.getElementById('new-job-form').classList.toggle('hidden');
+        }}
+
         async function saveProfile(e) {{
             e.preventDefault();
             let payload = {{
                 nombre: document.getElementById('edit-nombre').value,
+                descripcion: document.getElementById('edit-desc').value,
                 foto: document.getElementById('edit-foto').value,
                 region: document.getElementById('edit-region').value,
                 ciudad: document.getElementById('edit-ciudad').value,
@@ -692,9 +862,7 @@ def vista_perfil():
                 expectativa_renta: document.getElementById('edit-renta') ? document.getElementById('edit-renta').value : null,
                 habilidades: document.getElementById('edit-skills') ? document.getElementById('edit-skills').value : null,
                 contacto: document.getElementById('edit-contacto') ? document.getElementById('edit-contacto').value : null,
-                mensaje_bienvenida: document.getElementById('edit-welcome') ? document.getElementById('edit-welcome').value : null,
-                titulo_oferta: document.getElementById('edit-job-title') ? document.getElementById('edit-job-title').value : null,
-                sueldo_ofrecido: document.getElementById('edit-job-sueldo') ? document.getElementById('edit-job-sueldo').value : null
+                mensaje_bienvenida: document.getElementById('edit-welcome') ? document.getElementById('edit-welcome').value : null
             }};
 
             let r = await fetch('/api/update_profile', {{
@@ -706,6 +874,31 @@ def vista_perfil():
                 document.getElementById('save-status').classList.remove('hidden');
                 setTimeout(() => document.getElementById('save-status').classList.add('hidden'), 3000);
             }}
+        }}
+
+        async function createNewJob(e) {{
+            e.preventDefault();
+            let payload = {{
+                titulo: document.getElementById('job-title').value,
+                descripcion: document.getElementById('job-desc').value,
+                sueldo: document.getElementById('job-sueldo').value,
+                habilidades: document.getElementById('job-skills').value,
+                foto: document.getElementById('job-foto-val').value
+            }};
+
+            let r = await fetch('/api/create_job', {{
+                method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify(payload)
+            }});
+            let res = await r.json();
+            if(res.status === 'ok') location.reload(); else alert(res.msg);
+        }}
+
+        async function deleteJob(jobId) {{
+            if(!confirm('¿Deseas eliminar esta oferta?')) return;
+            let r = await fetch('/api/delete_job/' + jobId, {{ method: 'DELETE' }});
+            let res = await r.json();
+            if(res.status === 'ok') location.reload();
         }}
         </script>
     </body></html>"""
@@ -721,6 +914,7 @@ def update_profile():
     user = users_db[u]
     
     user["nombre"] = data.get("nombre", user["nombre"])
+    user["descripcion"] = data.get("descripcion", user.get("descripcion", ""))
     if data.get("foto"): user["foto"] = data.get("foto")
     
     if "ubicacion" not in user: user["ubicacion"] = {"lat": -33.4489, "lon": -70.6693}
@@ -736,21 +930,48 @@ def update_profile():
     if user["role"] == "empleador":
         if data.get("contacto") is not None: user["contacto"] = data["contacto"]
         if data.get("mensaje_bienvenida") is not None: user["mensaje_bienvenida"] = data["mensaje_bienvenida"]
-        
-        for o in ofertas_db:
-            if o["empleador_id"] == u:
-                if data.get("titulo_oferta"): o["titulo"] = data["titulo_oferta"]
-                if data.get("sueldo_ofrecido"): o["sueldo_ofrecido"] = int(data["sueldo_ofrecido"])
-                o["empresa"] = user["nombre"]
-                o["ubicacion"]["region"] = user["ubicacion"]["region"]
-                o["ubicacion"]["ciudad"] = user["ubicacion"]["ciudad"]
 
+    return jsonify({"status": "ok"})
+
+@app.route("/api/create_job", methods=["POST"])
+def create_job():
+    u = session.get("user_id")
+    if not u or u not in users_db or users_db[u]["role"] != "empleador":
+        return jsonify({"status": "error", "msg": "No autorizado"}), 401
+    
+    data = request.json
+    user = users_db[u]
+    
+    nueva_oferta = {
+        "id": f"job_{uuid.uuid4().hex[:6]}",
+        "empleador_id": u,
+        "titulo": data.get("titulo") or "Puesto Vacante",
+        "empresa": user["nombre"],
+        "descripcion": data.get("descripcion", ""),
+        "edad_minima": 18,
+        "ubicacion": user.get("ubicacion", {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}),
+        "habilidades_requeridas": [h.strip() for h in data.get("habilidades", "").split(",") if h.strip()] or ["atencion_cliente"],
+        "sueldo_ofrecido": int(data.get("sueldo") or 600000),
+        "foto": data.get("foto") or user.get("foto")
+    }
+    
+    ofertas_db.append(nueva_oferta)
+    return jsonify({"status": "ok"})
+
+@app.route("/api/delete_job/<job_id>", methods=["DELETE"])
+def delete_job(job_id):
+    u = session.get("user_id")
+    if not u: return jsonify({"status": "error"}), 401
+    
+    global ofertas_db
+    ofertas_db = [o for o in ofertas_db if not (o["id"] == job_id and o["empleador_id"] == u)]
     return jsonify({"status": "ok"})
 
 @app.route("/logout")
 def logout():
     session.pop("user_id", None)
     return redirect("/")
+
 @app.route("/manifest.json")
 def manifest():
     return jsonify({
@@ -777,21 +998,21 @@ def manifest():
         "orientation": "portrait",
         "scope": "/"
     })
-    
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
 @app.route("/.well-known/assetlinks.json")
 def assetlinks():
     return jsonify([{
         "relation": ["delegate_permission/common.handle_all_urls"],
         "target": {
             "namespace": "android_app",
-            "package_name": "com.barbermoon.palapp",  # Reemplaza por tu Package ID de PWABuilder
+            "package_name": "com.barbermoon.palapp",
             "sha256_cert_fingerprints": [
                 "70:BF:EB:2B:48:24:66:C9:93:11:DF:9D:4E:5C:08:D6:01:3A:F5:F4:2A:80:A9:E1:57:22:19:E4:57:CA:70:88"
             ]
         }
     }])
-    
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
