@@ -782,3 +782,16 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+@app.route("/.well-known/assetlinks.json")
+def assetlinks():
+    return jsonify([{
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.barbermoon.palapp",  # Reemplaza por tu Package ID de PWABuilder
+            "sha256_cert_fingerprints": [
+                ""70:BF:EB:2B:48:24:66:C9:93:11:DF:9D:4E:5C:08:D6:01:3A:F5:F4:2A:80:A9:E1:57:22:19:E4:57:CA:70:88""
+            ]
+        }
+    }])
+    
