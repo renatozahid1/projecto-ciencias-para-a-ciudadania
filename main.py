@@ -101,6 +101,10 @@ NAV_BAR = """
 HTML_HEAD = """
 <head>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="theme-color" content="#f59e0b">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
     <title>PalApp</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -747,7 +751,33 @@ def update_profile():
 def logout():
     session.pop("user_id", None)
     return redirect("/")
-
+@app.route("/manifest.json")
+def manifest():
+    return jsonify({
+        "short_name": "PalApp",
+        "name": "PalApp - Empleos y Talento",
+        "icons": [
+            {
+                "src": "https://ui-avatars.com/api/?name=PalApp&background=f59e0b&color=fff&size=192",
+                "type": "image/png",
+                "sizes": "192x192",
+                "purpose": "any maskable"
+            },
+            {
+                "src": "https://ui-avatars.com/api/?name=PalApp&background=f59e0b&color=fff&size=512",
+                "type": "image/png",
+                "sizes": "512x512",
+                "purpose": "any maskable"
+            }
+        ],
+        "start_url": "/",
+        "background_color": "#030712",
+        "theme_color": "#f59e0b",
+        "display": "standalone",
+        "orientation": "portrait",
+        "scope": "/"
+    })
+    
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
