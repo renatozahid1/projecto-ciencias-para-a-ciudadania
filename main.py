@@ -9,55 +9,66 @@ app.secret_key = "palapp_secret_key_super_segura_123"
 # --- BASE DE DATOS EN MEMORIA ---
 users_db = {
     "barbermoon": {
-        "pwd": "123", "role": "empleador", "nombre": "Admin Barber Moon", 
+        "pwd": "123", 
+        "role": "empleador", 
+        "nombre": "Barbería Barber Moon", 
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
         "contacto": "+56912345678",
-        "mensaje_bienvenida": "¡Hola! Vi tu perfil y tienes el talento que buscamos. ¿Hablamos?",
-        "foto": "https://ui-avatars.com/api/?name=Admin+Moon&background=f59e0b&color=fff"
+        "mensaje_bienvenida": "¡Hola! Vi tu perfil en PalApp y nos encantaría agendar una entrevista.",
+        "foto": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&h=300&fit=crop"
     },
     "juanp": {
-        "pwd": "123", "role": "candidato", "nombre": "Juan Pérez", "edad": 24,
+        "pwd": "123", 
+        "role": "candidato", 
+        "nombre": "Juan Pérez", 
+        "edad": 24,
         "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
         "expectativa_renta": 600000,
-        "habilidades": ["corte_cabello", "atencion_cliente"],
+        "habilidades": ["corte_cabello", "atencion_cliente", "barberia"],
         "foto": "https://ui-avatars.com/api/?name=Juan+Perez&background=1f2937&color=fff"
     }
 }
 
 ofertas_db = [
     {
-        "id": "job_102", "empleador_id": "barbermoon", "titulo": "Barbero / Estilista",
-        "empresa": "Barbería Barber Moon", "edad_minima": 20,
-        "ubicacion": {"lat": -33.4489, "lon": -70.6693},
+        "id": "job_102", 
+        "empleador_id": "barbermoon", 
+        "titulo": "Barbero / Estilista Senior",
+        "empresa": "Barbería Barber Moon", 
+        "edad_minima": 20,
+        "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"},
         "habilidades_requeridas": ["corte_cabello", "atencion_cliente"],
         "sueldo_ofrecido": 650000,
         "foto": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&h=300&fit=crop"
     }
 ]
 
-# (usuario_id, target_id): "like" | "pass"
+# Registros de Interacción
 swipes_db = {}
 chats_db = {}
 
-# --- LÓGICA DE MATCH ---
+# --- LÓGICA DE MATCH (ALGORITMO ORIGINAL) ---
 def calcular_match(cand, emp):
     if cand.get("edad", 0) < emp.get("edad_minima", 18):
         return 0.0
+    
     cand_skills = set(cand.get("habilidades", []))
     req_skills = set(emp.get("habilidades_requeridas", []))
     s_skills = len(cand_skills.intersection(req_skills)) / len(req_skills) if req_skills else 1.0
     
     cand_loc = cand.get("ubicacion", {"lat": -33.4489, "lon": -70.6693})
     emp_loc = emp.get("ubicacion", {"lat": -33.4489, "lon": -70.6693})
-    dlat = math.radians(emp_loc["lat"] - cand_loc["lat"])
-    dlon = math.radians(emp_loc["lon"] - cand_loc["lon"])
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(cand_loc["lat"])) * math.cos(math.radians(emp_loc["lat"])) * math.sin(dlon/2)**2
+    
+    dlat = math.radians(emp_loc.get("lat", -33.4489) - cand_loc.get("lat", -33.4489))
+    dlon = math.radians(emp_loc.get("lon", -70.6693) - cand_loc.get("lon", -70.6693))
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(cand_loc.get("lat", -33.4489))) * math.cos(math.radians(emp_loc.get("lat", -33.4489))) * math.sin(dlon/2)**2
     dist_km = 6371.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
     s_dist = math.exp(-0.08 * dist_km)
     
     sueldo_emp = emp.get("sueldo_ofrecido", 0)
     exp_cand = cand.get("expectativa_renta", 1) or 1
     s_sal = 1.0 if sueldo_emp >= exp_cand else (sueldo_emp / exp_cand)
+    
     return round((0.45 * s_skills + 0.35 * s_dist + 0.20 * s_sal) * 100, 1)
 
 def check_match_mutuo(cand_id, emp_id):
@@ -70,7 +81,8 @@ def check_match_mutuo(cand_id, emp_id):
             empleador = users_db.get(emp_id, {})
             msg_bienvenida = empleador.get("mensaje_bienvenida", "🎉 ¡Es un Match Mutuo! Ya pueden conversar.")
             chats_db[chat_key] = [{
-                "emisor": emp_id, "nombre_emisor": empleador.get("nombre", "Empleador"),
+                "emisor": emp_id, 
+                "nombre_emisor": empleador.get("nombre", "Empleador"),
                 "texto": msg_bienvenida,
                 "hora": datetime.now().strftime("%H:%M")
             }]
@@ -80,9 +92,9 @@ def check_match_mutuo(cand_id, emp_id):
 # --- COMPONENTES FRONTEND ---
 NAV_BAR = """
 <nav class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-3 text-xs text-gray-400 z-50">
-    <a href="/feed" class="flex flex-col items-center hover:text-amber-500"><span class="text-lg">🔥</span>Swipe</a>
-    <a href="/chats" class="flex flex-col items-center hover:text-amber-500"><span class="text-lg">💬</span>Chats</a>
-    <a href="/perfil" class="flex flex-col items-center hover:text-amber-500"><span class="text-lg">👤</span>Perfil</a>
+    <a href="/feed" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔥</span>Swipe</a>
+    <a href="/chats" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">💬</span>Chats</a>
+    <a href="/perfil" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">👤</span>Perfil</a>
 </nav>
 """
 
@@ -94,32 +106,131 @@ HTML_HEAD = """
     <style>
         .card-drag { transition: transform 0.2s ease, opacity 0.2s ease; cursor: grab; }
         .card-drag:active { cursor: grabbing; transition: none; }
-        .match-overlay { display: none; background: rgba(0,0,0,0.9); z-index: 100; }
+        .match-overlay { display: none; background: rgba(0,0,0,0.92); z-index: 100; }
     </style>
 </head>
 """
 
 HTML_AUTH = f"""
 <!DOCTYPE html><html lang="es">{HTML_HEAD}
-<body class="bg-gray-950 text-white min-h-screen flex flex-col justify-center items-center px-4">
+<body class="bg-gray-950 text-white min-h-screen flex flex-col justify-center items-center px-4 py-8">
     <div class="w-full max-w-sm text-center mb-6">
-        <div class="w-20 h-20 bg-amber-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 shadow-lg shadow-amber-500/20">⚡</div>
+        <div class="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg shadow-amber-500/20">⚡</div>
         <h1 class="text-3xl font-extrabold tracking-tight">PalApp</h1>
-        <p class="text-gray-400 text-sm mt-1">Conecta el talento con las empresas</p>
+        <p class="text-gray-400 text-xs mt-1">Empleos y Talento al instante</p>
     </div>
+
     <div class="w-full max-w-sm bg-gray-900 p-6 rounded-2xl border border-gray-800 shadow-xl">
-        <form onsubmit="login(event)" id="loginForm" class="space-y-4">
-            <input id="user" placeholder="Usuario (ej: barbermoon o juanp)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
-            <input id="pwd" type="password" placeholder="Contraseña (123)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
-            <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold rounded-xl transition">Ingresar</button>
+        <!-- Selector de Pestañas -->
+        <div class="flex border-b border-gray-800 mb-5">
+            <button id="tab-login-btn" onclick="switchTab('login')" class="flex-1 py-2 text-center text-sm font-bold border-b-2 border-amber-500 text-amber-500">Ingresar</button>
+            <button id="tab-register-btn" onclick="switchTab('register')" class="flex-1 py-2 text-center text-sm font-bold border-b-2 border-transparent text-gray-400 hover:text-white">Registrarse</button>
+        </div>
+
+        <!-- FORMULARIO LOGIN -->
+        <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+            <input id="login-user" placeholder="Usuario" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
+            <input id="login-pwd" type="password" placeholder="Contraseña" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
+            <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold rounded-xl transition">Iniciar Sesión</button>
+        </form>
+
+        <!-- FORMULARIO REGISTRO -->
+        <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-3 hidden">
+            <div class="flex gap-2">
+                <label class="flex-1 text-center py-2 bg-gray-800 border border-gray-700 rounded-xl cursor-pointer text-xs font-bold text-gray-300 has-[:checked]:border-amber-500 has-[:checked]:text-amber-500">
+                    <input type="radio" name="role" value="candidato" checked class="hidden" onchange="toggleRoleFields()"> Candidato
+                </label>
+                <label class="flex-1 text-center py-2 bg-gray-800 border border-gray-700 rounded-xl cursor-pointer text-xs font-bold text-gray-300 has-[:checked]:border-amber-500 has-[:checked]:text-amber-500">
+                    <input type="radio" name="role" value="empleador" class="hidden" onchange="toggleRoleFields()"> Empleador
+                </label>
+            </div>
+
+            <input id="reg-user" placeholder="Usuario" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            <input id="reg-nombre" placeholder="Nombre completo o Empresa" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            <input id="reg-pwd" type="password" placeholder="Contraseña" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            
+            <div class="grid grid-cols-2 gap-2">
+                <input id="reg-region" placeholder="Región (ej: Valparaíso)" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-ciudad" placeholder="Ciudad (ej: Viña del Mar)" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            </div>
+
+            <!-- Campos dinámicos Candidato -->
+            <div id="cand-fields" class="space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="reg-edad" type="number" placeholder="Edad" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    <input id="reg-renta" type="number" placeholder="Expectativa Renta ($)" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                </div>
+                <input id="reg-skills" placeholder="Habilidades (separadas por coma)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            </div>
+
+            <!-- Campos dinámicos Empleador -->
+            <div id="emp-fields" class="space-y-2 hidden">
+                <input id="reg-contacto" placeholder="Teléfono de contacto" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-job-title" placeholder="Título de la oferta (ej: Barbero)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold rounded-xl transition mt-2">Crear Cuenta</button>
         </form>
     </div>
+
     <script>
-    async function login(e) {{
+    function switchTab(tab) {{
+        if(tab === 'login') {{
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            document.getElementById('tab-login-btn').className = "flex-1 py-2 text-center text-sm font-bold border-b-2 border-amber-500 text-amber-500";
+            document.getElementById('tab-register-btn').className = "flex-1 py-2 text-center text-sm font-bold border-b-2 border-transparent text-gray-400";
+        }} else {{
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            document.getElementById('tab-register-btn').className = "flex-1 py-2 text-center text-sm font-bold border-b-2 border-amber-500 text-amber-500";
+            document.getElementById('tab-login-btn').className = "flex-1 py-2 text-center text-sm font-bold border-b-2 border-transparent text-gray-400";
+        }}
+    }}
+
+    function toggleRoleFields() {{
+        let role = document.querySelector('input[name="role"]:checked').value;
+        if(role === 'candidato') {{
+            document.getElementById('cand-fields').classList.remove('hidden');
+            document.getElementById('emp-fields').classList.add('hidden');
+        }} else {{
+            document.getElementById('cand-fields').classList.add('hidden');
+            document.getElementById('emp-fields').classList.remove('hidden');
+        }}
+    }}
+
+    async function handleLogin(e) {{
         e.preventDefault();
         let r = await fetch('/api/login', {{
             method: 'POST', headers: {{'Content-Type': 'application/json'}},
-            body: JSON.stringify({{user: document.getElementById('user').value, pwd: document.getElementById('pwd').value}})
+            body: JSON.stringify({{user: document.getElementById('login-user').value, pwd: document.getElementById('login-pwd').value}})
+        }});
+        let res = await r.json();
+        if(res.status === 'ok') location.href = '/feed'; else alert(res.msg);
+    }}
+
+    async function handleRegister(e) {{
+        e.preventDefault();
+        let role = document.querySelector('input[name="role"]:checked').value;
+        let payload = {{
+            user: document.getElementById('reg-user').value,
+            pwd: document.getElementById('reg-pwd').value,
+            nombre: document.getElementById('reg-nombre').value,
+            role: role,
+            region: document.getElementById('reg-region').value,
+            ciudad: document.getElementById('reg-ciudad').value,
+            edad: document.getElementById('reg-edad').value,
+            expectativa_renta: document.getElementById('reg-renta').value,
+            habilidades: document.getElementById('reg-skills').value,
+            contacto: document.getElementById('reg-contacto').value,
+            titulo_oferta: document.getElementById('reg-job-title').value,
+            sueldo_ofrecido: document.getElementById('reg-job-sueldo').value
+        }};
+
+        let r = await fetch('/api/register', {{
+            method: 'POST', headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify(payload)
         }});
         let res = await r.json();
         if(res.status === 'ok') location.href = '/feed'; else alert(res.msg);
@@ -133,16 +244,14 @@ HTML_FEED = f"""
 <body class="bg-gray-950 text-white min-h-screen pb-20 px-4 pt-6 overflow-hidden">
     <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
         <h2 class="text-xl font-bold">🔥 Descubrir</h2>
-        <span class="bg-gray-800 px-2 py-1 rounded-lg text-xs capitalize">{{{{ user.role }}}}</span>
+        <span class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1 rounded-full text-xs font-bold capitalize">{{{{ user.role }}}}</span>
     </div>
 
-    <div class="max-w-sm mx-auto relative h-[65vh]" id="card-container">
-        <!-- Tarjeta dinámica -->
-    </div>
+    <div class="max-w-sm mx-auto relative h-[65vh]" id="card-container"></div>
 
     <div class="max-w-sm mx-auto flex justify-center gap-6 mt-6 z-10 relative">
-        <button onclick="action('pass')" class="w-16 h-16 bg-gray-900 border-2 border-red-500/50 text-red-500 rounded-full text-3xl shadow-lg hover:bg-red-500/20 transition">❌</button>
-        <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 transition">💚</button>
+        <button onclick="action('pass')" class="w-16 h-16 bg-gray-900 border-2 border-red-500/50 text-red-500 rounded-full text-3xl shadow-lg hover:bg-red-500/20 transition flex items-center justify-center">❌</button>
+        <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 transition flex items-center justify-center">💚</button>
     </div>
 
     <!-- Match Overlay -->
@@ -173,22 +282,24 @@ HTML_FEED = f"""
     function renderCard() {{
         const container = document.getElementById('card-container');
         if (queue.length === 0) {{
-            container.innerHTML = '<div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6"><span class="text-4xl mb-4">📭</span><h3 class="font-bold text-lg">No hay más perfiles</h3></div>';
+            container.innerHTML = '<div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6"><span class="text-5xl mb-4">📭</span><h3 class="font-bold text-lg">No hay más candidatos u ofertas por ahora</h3></div>';
             return;
         }}
 
         currentItem = queue[0];
-        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-gray-300 text-[10px] px-2 py-1 rounded">#${{h}}</span>`).join('');
-        const sueldo_texto = currentItem.sueldo_ofrecido ? `$${{currentItem.sueldo_ofrecido.toLocaleString('es-CL')}}` : `$${{currentItem.expectativa_renta.toLocaleString('es-CL')}} (Exp)`;
-        
+        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800/80 backdrop-blur-sm text-gray-200 text-[11px] px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
+        const sueldo_texto = currentItem.sueldo_ofrecido ? `$${{currentItem.sueldo_ofrecido.toLocaleString('es-CL')}}` : (currentItem.expectativa_renta ? `$${{currentItem.expectativa_renta.toLocaleString('es-CL')}} (Exp)` : '');
+        const loc_texto = currentItem.ubicacion ? `${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
+
         container.innerHTML = `
             <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{currentItem.foto}}')">
                 <div class="mt-auto p-5 relative z-10">
                     <div class="flex justify-between items-end mb-2">
-                        <span class="bg-amber-500 text-gray-950 text-xs px-2.5 py-1 rounded-full font-bold shadow-lg">${{currentItem.match_score}}% Match Algorítmico</span>
+                        <span class="bg-amber-500 text-gray-950 text-xs px-3 py-1 rounded-full font-extrabold shadow-lg">${{currentItem.match_score}}% Match</span>
                     </div>
-                    <h2 class="text-2xl font-extrabold text-white mb-1 shadow-black">${{currentItem.titulo || currentItem.nombre}} <span class="text-lg font-normal text-gray-300">${{currentItem.edad || ''}}</span></h2>
-                    <p class="text-amber-500 font-medium text-sm mb-3 drop-shadow-md">${{currentItem.empresa || ''}} | ${{sueldo_texto}}</p>
+                    <h2 class="text-2xl font-extrabold text-white mb-1">${{currentItem.titulo || currentItem.nombre}} <span class="text-lg font-normal text-gray-300">${{currentItem.edad ? currentItem.edad + ' años' : ''}}</span></h2>
+                    <p class="text-amber-400 font-medium text-sm mb-1">${{currentItem.empresa || currentItem.nombre}} | ${{sueldo_texto}}</p>
+                    <p class="text-gray-400 text-xs mb-3">📍 ${{loc_texto}}</p>
                     <div class="flex flex-wrap gap-1.5">${{tags}}</div>
                 </div>
             </div>
@@ -237,7 +348,7 @@ HTML_FEED = f"""
             method: 'POST', headers: {{'Content-Type': 'application/json'}},
             body: JSON.stringify({{target_id: target_id, type: type}})
         }});
-        let res = await r.json();
+                let res = await r.json();
         
         if (res.is_match) {{
             document.getElementById('match-img').src = currentItem.foto;
@@ -251,20 +362,63 @@ HTML_FEED = f"""
 </body></html>
 """
 
-# --- RUTAS ---
+# --- RUTAS DE AUTENTICACIÓN Y FEED ---
 @app.route("/")
 def index():
-    if "user_id" in session: return redirect("/feed")
+    if "user_id" in session and session["user_id"] in users_db: 
+        return redirect("/feed")
     return render_template_string(HTML_AUTH)
 
 @app.route("/api/login", methods=["POST"])
 def login():
     data = request.json
-    u, p = data.get("user"), data.get("pwd")
+    u, p = data.get("user", "").strip().lower(), data.get("pwd", "").strip()
     if u in users_db and users_db[u]["pwd"] == p:
         session["user_id"] = u
         return jsonify({"status": "ok"})
-    return jsonify({"status": "error", "msg": "Credenciales inválidas"}), 401
+    return jsonify({"status": "error", "msg": "Usuario o contraseña incorrectos"}), 401
+
+@app.route("/api/register", methods=["POST"])
+def register():
+    data = request.json
+    u = data.get("user", "").strip().lower()
+    p = data.get("pwd", "").strip()
+    role = data.get("role", "candidato")
+    nombre = data.get("nombre", u).strip()
+    region = data.get("region", "Región Metropolitana").strip()
+    ciudad = data.get("ciudad", "Santiago").strip()
+
+    if not u or not p:
+        return jsonify({"status": "error", "msg": "Complete usuario y contraseña"}), 400
+    if u in users_db:
+        return jsonify({"status": "error", "msg": "El usuario ya se encuentra registrado"}), 400
+
+    users_db[u] = {
+        "pwd": p, "role": role, "nombre": nombre,
+        "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
+        "foto": f"https://ui-avatars.com/api/?name={nombre.replace(' ', '+')}&background=f59e0b&color=fff",
+        "edad": int(data.get("edad") or 22) if role == "candidato" else None,
+        "expectativa_renta": int(data.get("expectativa_renta") or 500000) if role == "candidato" else None,
+        "habilidades": [h.strip() for h in data.get("habilidades", "").split(",") if h.strip()] if role == "candidato" else [],
+        "contacto": data.get("contacto", "") if role == "empleador" else None,
+        "mensaje_bienvenida": "¡Hola! Gracias por conectar con nosotros." if role == "empleador" else None
+    }
+
+    if role == "empleador":
+        ofertas_db.append({
+            "id": f"job_{uuid.uuid4().hex[:6]}",
+            "empleador_id": u,
+            "titulo": data.get("titulo_oferta") or "Puesto Vacante",
+            "empresa": nombre,
+            "edad_minima": 18,
+            "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
+            "habilidades_requeridas": ["atencion_cliente"],
+            "sueldo_ofrecido": int(data.get("sueldo_ofrecido") or 600000),
+            "foto": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=400&h=300&fit=crop"
+        })
+
+    session["user_id"] = u
+    return jsonify({"status": "ok"})
 
 @app.route("/feed")
 def vista_feed():
@@ -275,6 +429,7 @@ def vista_feed():
 @app.route("/api/feed", methods=["GET"])
 def get_feed():
     u = session.get("user_id")
+    if not u or u not in users_db: return jsonify([])
     user = users_db[u]
     res = []
     
@@ -287,7 +442,7 @@ def get_feed():
                 res.append(item)
     else:
         mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
-        oferta_base = mis_ofertas[0] if mis_ofertas else {}
+        oferta_base = mis_ofertas[0] if mis_ofertas else {"edad_minima": 18, "habilidades_requeridas": [], "sueldo_ofrecido": 0}
 
         for cand_id, cand_data in users_db.items():
             if cand_data.get("role") == "candidato" and (u, cand_id) not in swipes_db:
@@ -316,23 +471,27 @@ def handle_swipe():
 
     return jsonify({"status": "ok", "is_match": is_match})
 
-# --- SISTEMA DE CHAT ---
+# --- SISTEMA DE CHAT EN TIEMPO REAL ---
 @app.route("/chats")
 def vista_chats():
     u = session.get("user_id")
+    if not u or u not in users_db: return redirect("/")
+    
     mis_chats = []
     for chat_key in chats_db:
-        if u in chat_key.split("_"):
-            otro_id = chat_key.replace(u, "").replace("_", "")
+        parts = chat_key.split("_")
+        if u in parts:
+            otro_id = parts[0] if parts[1] == u else parts[1]
             if otro_id in users_db:
-                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"]})
+                ultimo_msg = chats_db[chat_key][-1]["texto"] if chats_db[chat_key] else "¡Nuevo match!"
+                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"], "foto": users_db[otro_id]["foto"], "ultimo_msg": ultimo_msg})
             
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
         <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
-        <div class="space-y-4">
-            {''.join([f'<a href="/chat/{c["id"]}" class="block bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-amber-500 transition"><h3 class="font-bold">{c["nombre"]}</h3><p class="text-xs text-gray-500 mt-1">Toca para abrir chat 💬</p></a>' for c in mis_chats])}
-            { '<p class="text-gray-500 text-center">Solo los matches mutuos aparecen aquí.</p>' if not mis_chats else '' }
+        <div class="space-y-3">
+            {''.join([f'<a href="/chat/{c["id"]}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition"><img src="{c["foto"]}" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3"><div class="flex-1 overflow-hidden"><h3 class="font-bold text-sm">{c["nombre"]}</h3><p class="text-xs text-gray-400 truncate">{c["ultimo_msg"]}</p></div></a>' for c in mis_chats])}
+            { '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas. ¡Desliza en el feed para encontrar matches!</p>' if not mis_chats else '' }
         </div>
         {NAV_BAR}
     </body></html>"""
@@ -341,22 +500,25 @@ def vista_chats():
 @app.route("/chat/<target_id>")
 def chat_room(target_id):
     u = session.get("user_id")
-    if not u or target_id not in users_db: return redirect("/")
+    if not u or u not in users_db or target_id not in users_db: return redirect("/")
     
     otro_user = users_db[target_id]
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen flex flex-col">
-        <div class="bg-gray-900 p-4 flex items-center border-b border-gray-800 sticky top-0 z-50">
-            <button onclick="location.href='/chats'" class="mr-4 text-2xl hover:text-amber-500">⬅</button>
+        <div class="bg-gray-900 p-3 flex items-center border-b border-gray-800 sticky top-0 z-50">
+            <button onclick="location.href='/chats'" class="mr-3 text-xl hover:text-amber-500">⬅</button>
             <img src="{otro_user['foto']}" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
-            <h2 class="font-bold">{otro_user['nombre']}</h2>
+            <div>
+                <h2 class="font-bold text-sm">{otro_user['nombre']}</h2>
+                <span class="text-[10px] text-green-400">● En línea</span>
+            </div>
         </div>
         <div id="chat-box" class="flex-1 p-4 overflow-y-auto pb-24 space-y-3"></div>
         
-        <div class="p-3 bg-gray-900 fixed bottom-0 left-0 right-0 border-t border-gray-800 flex gap-2">
+        <form onsubmit="sendMessage(event)" class="p-3 bg-gray-900 fixed bottom-0 left-0 right-0 border-t border-gray-800 flex gap-2">
             <input id="msg-input" type="text" placeholder="Escribe un mensaje..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 text-white">
-            <button onclick="sendMessage()" class="bg-amber-500 text-gray-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-400">Enviar</button>
-        </div>
+            <button type="submit" class="bg-amber-500 text-gray-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-400">Enviar</button>
+        </form>
         
         <script>
             const targetId = "{target_id}";
@@ -367,19 +529,18 @@ def chat_room(target_id):
                 let msgs = await r.json();
                 let html = msgs.map(m => `
                     <div class="flex ${{m.emisor === myId ? 'justify-end' : 'justify-start'}}">
-                        <div class="max-w-[75%] rounded-xl px-4 py-2 ${{m.emisor === myId ? 'bg-amber-500 text-gray-950 rounded-br-none' : 'bg-gray-800 text-white rounded-bl-none'}}">
-                            <p class="text-sm">${{m.texto}}</p>
-                            <span class="text-[10px] opacity-70 block text-right mt-1">${{m.hora}}</span>
+                        <div class="max-w-[78%] rounded-2xl px-4 py-2 text-sm ${{m.emisor === myId ? 'bg-amber-500 text-gray-950 font-medium rounded-br-none' : 'bg-gray-800 text-white rounded-bl-none border border-gray-700'}}">
+                            <p>${{m.texto}}</p>
+                            <span class="text-[9px] opacity-70 block text-right mt-1">${{m.hora}}</span>
                         </div>
                     </div>
                 `).join('');
                 let box = document.getElementById('chat-box');
-                let scroll = box.scrollHeight - box.scrollTop === box.clientHeight;
                 box.innerHTML = html;
-                if(scroll) box.scrollTo(0, box.scrollHeight);
             }}
             
-            async function sendMessage() {{
+            async function sendMessage(e) {{
+                e.preventDefault();
                 let input = document.getElementById('msg-input');
                 let text = input.value.trim();
                 if(!text) return;
@@ -395,7 +556,7 @@ def chat_room(target_id):
             
             setInterval(loadChat, 2000);
             loadChat();
-            setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 300);
+            setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 200);
         </script>
     </body></html>"""
     return render_template_string(html)
@@ -403,6 +564,8 @@ def chat_room(target_id):
 @app.route("/api/chat/<target_id>", methods=["GET", "POST"])
 def api_chat(target_id):
     u = session.get("user_id")
+    if not u: return jsonify([])
+    
     chat_key = f"{u}_{target_id}" if f"{u}_{target_id}" in chats_db else f"{target_id}_{u}"
     
     if request.method == "POST":
@@ -416,69 +579,169 @@ def api_chat(target_id):
     
     return jsonify(chats_db.get(chat_key, []))
 
-# --- PERFIL DIVIDIDO Y EDITABLE ---
+# --- PERFIL EDITABLE CON DATOS COMPLETOS ---
 @app.route("/perfil")
 def vista_perfil():
     u = session.get("user_id")
+    if not u or u not in users_db: return redirect("/")
+    
     user = users_db[u]
-    
     loc = user.get("ubicacion", {})
-    region_str = loc.get("region", "Sin región registrada")
-    ciudad_str = loc.get("ciudad", "Sin ciudad")
+    region_val = loc.get("region", "")
+    ciudad_val = loc.get("ciudad", "")
     
-    extra_html = ""
-    if user["role"] == "empleador":
-        mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
-        ofertas_html = "".join([f'<div class="bg-gray-800 border border-gray-700 p-3 rounded-lg mb-2"><p class="font-bold text-amber-500">{o["empresa"]}</p><p class="text-sm text-gray-300">{o["titulo"]}</p></div>' for o in mis_ofertas])
-        
-        extra_html = f"""
-        <div class="w-full max-w-sm mt-6">
-            <h2 class="font-bold text-lg border-b border-gray-700 pb-2 mb-3">🏢 Mis Empresas / Ofertas</h2>
-            {ofertas_html}
-            
-            <h2 class="font-bold text-lg border-b border-gray-700 pb-2 mt-6 mb-3">⚙️ Configuración de Chat</h2>
-            <div class="bg-gray-800 border border-gray-700 p-4 rounded-lg">
-                <label class="text-xs text-gray-400 font-bold">Mensaje automático de Bienvenida (Match)</label>
-                <textarea id="welcome-msg" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-white mt-2 focus:border-amber-500 outline-none" rows="3">{user.get('mensaje_bienvenida', '🎉 ¡Es un Match Mutuo! Ya pueden conversar.')}</textarea>
-                <button onclick="saveWelcomeMsg()" class="w-full mt-3 text-sm bg-amber-500 text-gray-950 py-2 rounded-lg font-bold hover:bg-amber-400">Guardar Mensaje</button>
-                <p id="save-status" class="text-green-500 text-xs text-center mt-2 hidden">¡Mensaje actualizado!</p>
-            </div>
-        </div>
-        
-        <script>
-            async function saveWelcomeMsg() {{
-                let text = document.getElementById('welcome-msg').value;
-                await fetch('/api/update_profile', {{
-                    method: 'POST', headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{mensaje_bienvenida: text}})
-                }});
-                document.getElementById('save-status').style.display = 'block';
-                setTimeout(() => document.getElementById('save-status').style.display = 'none', 3000);
-            }}
-        </script>
-        """
+    # Oferta de empleo asociada si es Empleador
+    mi_oferta = next((o for o in ofertas_db if o["empleador_id"] == u), {})
 
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
-    <body class="bg-gray-950 text-white min-h-screen p-4 pb-24 flex flex-col items-center pt-10">
-        <img src="{user['foto']}" class="w-28 h-28 rounded-full border-4 border-amber-500 mb-4 object-cover shadow-lg shadow-amber-500/20">
-        <h1 class="text-2xl font-extrabold">{user['nombre']}</h1>
-        <p class="text-amber-500 text-sm mb-1 capitalize font-bold">{user['role']}</p>
-        <p class="text-gray-400 text-sm mb-4">📍 {ciudad_str}, {region_str}</p>
-        
-        {extra_html}
-        
-        <a href="/logout" class="w-full max-w-sm text-center py-3 border border-red-500/50 text-red-500 font-bold rounded-xl hover:bg-red-500/10 transition mt-8">Cerrar Sesión</a>
+    <body class="bg-gray-950 text-white min-h-screen p-4 pb-24">
+        <div class="max-w-sm mx-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold">👤 Mi Perfil</h1>
+                <a href="/logout" class="text-xs bg-red-500/10 border border-red-500/30 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-500/20 font-bold">Cerrar Sesión</a>
+            </div>
+
+            <form onsubmit="saveProfile(event)" class="space-y-4 bg-gray-900 p-5 rounded-2xl border border-gray-800">
+                <div class="text-center mb-4">
+                    <img id="avatar-preview" src="{user.get('foto', '')}" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <span class="text-xs text-amber-500 font-bold uppercase tracking-wider">{user['role']}</span>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 font-bold">Nombre Completo / Empresa</label>
+                    <input id="edit-nombre" value="{user.get('nombre', '')}" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 font-bold">URL Foto de Perfil</label>
+                    <input id="edit-foto" value="{user.get('foto', '')}" onchange="document.getElementById('avatar-preview').src=this.value" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Región</label>
+                        <input id="edit-region" value="{region_val}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Ciudad</label>
+                        <input id="edit-ciudad" value="{ciudad_val}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                </div>
+
+                {"<!-- CAMPOS EDITABLES CANDIDATO -->" if user["role"] == "candidato" else ""}
+                <div class="{'space-y-4' if user['role'] == 'candidato' else 'hidden'}">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Edad</label>
+                            <input id="edit-edad" type="number" value="{user.get('edad', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Expectativa Renta ($)</label>
+                            <input id="edit-renta" type="number" value="{user.get('expectativa_renta', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Habilidades (separadas por coma)</label>
+                        <input id="edit-skills" value="{', '.join(user.get('habilidades', []))}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                </div>
+
+                {"<!-- CAMPOS EDITABLES EMPLEADOR -->" if user["role"] == "empleador" else ""}
+                <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Contacto Telefónico</label>
+                        <input id="edit-contacto" value="{user.get('contacto', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-amber-500 font-bold">Mensaje de Bienvenida Automático (Match)</label>
+                        <textarea id="edit-welcome" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm mt-1 focus:border-amber-500 outline-none" rows="2">{user.get('mensaje_bienvenida', '')}</textarea>
+                    </div>
+
+                    <div class="border-t border-gray-800 pt-3 mt-3">
+                        <h3 class="text-xs font-bold text-amber-400 uppercase mb-2">💼 Datos de la Oferta Pública</h3>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Título del Cargo</label>
+                            <input id="edit-job-title" value="{mi_oferta.get('titulo', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                        <div class="mt-2">
+                            <label class="text-xs text-gray-400 font-bold">Sueldo Ofrecido ($)</label>
+                            <input id="edit-job-sueldo" type="number" value="{mi_oferta.get('sueldo_ofrecido', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-amber-500 text-gray-950 font-bold rounded-xl hover:bg-amber-400 transition mt-4">Guardar Cambios</button>
+                <p id="save-status" class="text-green-400 text-xs text-center hidden font-bold">¡Perfil actualizado correctamente!</p>
+            </form>
+        </div>
         {NAV_BAR}
+
+        <script>
+        async function saveProfile(e) {{
+            e.preventDefault();
+            let payload = {{
+                nombre: document.getElementById('edit-nombre').value,
+                foto: document.getElementById('edit-foto').value,
+                region: document.getElementById('edit-region').value,
+                ciudad: document.getElementById('edit-ciudad').value,
+                edad: document.getElementById('edit-edad') ? document.getElementById('edit-edad').value : null,
+                expectativa_renta: document.getElementById('edit-renta') ? document.getElementById('edit-renta').value : null,
+                habilidades: document.getElementById('edit-skills') ? document.getElementById('edit-skills').value : null,
+                contacto: document.getElementById('edit-contacto') ? document.getElementById('edit-contacto').value : null,
+                mensaje_bienvenida: document.getElementById('edit-welcome') ? document.getElementById('edit-welcome').value : null,
+                titulo_oferta: document.getElementById('edit-job-title') ? document.getElementById('edit-job-title').value : null,
+                sueldo_ofrecido: document.getElementById('edit-job-sueldo') ? document.getElementById('edit-job-sueldo').value : null
+            }};
+
+            let r = await fetch('/api/update_profile', {{
+                method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify(payload)
+            }});
+            let res = await r.json();
+            if(res.status === 'ok') {{
+                document.getElementById('save-status').classList.remove('hidden');
+                setTimeout(() => document.getElementById('save-status').classList.add('hidden'), 3000);
+            }}
+        }}
+        </script>
     </body></html>"""
     return render_template_string(html)
 
 @app.route("/api/update_profile", methods=["POST"])
 def update_profile():
     u = session.get("user_id")
-    if u and u in users_db:
-        users_db[u]["mensaje_bienvenida"] = request.json.get("mensaje_bienvenida", "")
-        return jsonify({"status": "ok"})
-    return jsonify({"error": "Unauthorized"}), 401
+    if not u or u not in users_db:
+        return jsonify({"status": "error", "msg": "No autorizado"}), 401
+    
+    data = request.json
+    user = users_db[u]
+    
+    user["nombre"] = data.get("nombre", user["nombre"])
+    if data.get("foto"): user["foto"] = data.get("foto")
+    
+    if "ubicacion" not in user: user["ubicacion"] = {"lat": -33.4489, "lon": -70.6693}
+    user["ubicacion"]["region"] = data.get("region", user["ubicacion"].get("region", ""))
+    user["ubicacion"]["ciudad"] = data.get("ciudad", user["ubicacion"].get("ciudad", ""))
+    
+    if user["role"] == "candidato":
+        if data.get("edad"): user["edad"] = int(data["edad"])
+        if data.get("expectativa_renta"): user["expectativa_renta"] = int(data["expectativa_renta"])
+        if data.get("habilidades") is not None:
+            user["habilidades"] = [h.strip() for h in data["habilidades"].split(",") if h.strip()]
+    
+    if user["role"] == "empleador":
+        if data.get("contacto") is not None: user["contacto"] = data["contacto"]
+        if data.get("mensaje_bienvenida") is not None: user["mensaje_bienvenida"] = data["mensaje_bienvenida"]
+        
+        for o in ofertas_db:
+            if o["empleador_id"] == u:
+                if data.get("titulo_oferta"): o["titulo"] = data["titulo_oferta"]
+                if data.get("sueldo_ofrecido"): o["sueldo_ofrecido"] = int(data["sueldo_ofrecido"])
+                o["empresa"] = user["nombre"]
+                o["ubicacion"]["region"] = user["ubicacion"]["region"]
+                o["ubicacion"]["ciudad"] = user["ubicacion"]["ciudad"]
+
+    return jsonify({"status": "ok"})
 
 @app.route("/logout")
 def logout():
