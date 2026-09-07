@@ -790,7 +790,7 @@ def assetlinks():
             "namespace": "android_app",
             "package_name": "com.barbermoon.palapp",  # Reemplaza por tu Package ID de PWABuilder
             "sha256_cert_fingerprints": [
-                ""70:BF:EB:2B:48:24:66:C9:93:11:DF:9D:4E:5C:08:D6:01:3A:F5:F4:2A:80:A9:E1:57:22:19:E4:57:CA:70:88""
+                "70:BF:EB:2B:48:24:66:C9:93:11:DF:9D:4E:5C:08:D6:01:3A:F5:F4:2A:80:A9:E1:57:22:19:E4:57:CA:70:88"
             ]
         }
     }])
