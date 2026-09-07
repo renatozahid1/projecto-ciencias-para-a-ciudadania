@@ -9,13 +9,16 @@ app.secret_key = "palapp_secret_key_super_segura_123"
 # --- BASE DE DATOS EN MEMORIA ---
 users_db = {
     "barbermoon": {
-        "pwd": "123", "role": "empleador", "nombre": "Barbería Barber Moon", 
-        "ubicacion": {"lat": -33.4489, "lon": -70.6693}, "contacto": "+56912345678",
-        "foto": "https://ui-avatars.com/api/?name=Barber+Moon&background=f59e0b&color=fff"
+        "pwd": "123", "role": "empleador", "nombre": "Admin Barber Moon", 
+        "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
+        "contacto": "+56912345678",
+        "mensaje_bienvenida": "¡Hola! Vi tu perfil y tienes el talento que buscamos. ¿Hablamos?",
+        "foto": "https://ui-avatars.com/api/?name=Admin+Moon&background=f59e0b&color=fff"
     },
     "juanp": {
         "pwd": "123", "role": "candidato", "nombre": "Juan Pérez", "edad": 24,
-        "ubicacion": {"lat": -33.4489, "lon": -70.6693}, "expectativa_renta": 600000,
+        "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": "Región Metropolitana", "ciudad": "Santiago"}, 
+        "expectativa_renta": 600000,
         "habilidades": ["corte_cabello", "atencion_cliente"],
         "foto": "https://ui-avatars.com/api/?name=Juan+Perez&background=1f2937&color=fff"
     }
@@ -36,7 +39,7 @@ ofertas_db = [
 swipes_db = {}
 chats_db = {}
 
-# --- LÓGICA DE MATCH (TU ALGORITMO) ---
+# --- LÓGICA DE MATCH ---
 def calcular_match(cand, emp):
     if cand.get("edad", 0) < emp.get("edad_minima", 18):
         return 0.0
@@ -58,16 +61,17 @@ def calcular_match(cand, emp):
     return round((0.45 * s_skills + 0.35 * s_dist + 0.20 * s_sal) * 100, 1)
 
 def check_match_mutuo(cand_id, emp_id):
-    # Match bidireccional
     c_likes_e = swipes_db.get((cand_id, emp_id)) == "like"
     e_likes_c = swipes_db.get((emp_id, cand_id)) == "like"
     
     if c_likes_e and e_likes_c:
         chat_key = f"{cand_id}_{emp_id}"
         if chat_key not in chats_db:
+            empleador = users_db.get(emp_id, {})
+            msg_bienvenida = empleador.get("mensaje_bienvenida", "🎉 ¡Es un Match Mutuo! Ya pueden conversar.")
             chats_db[chat_key] = [{
-                "emisor": "sistema", "nombre_emisor": "PalApp",
-                "texto": "🎉 ¡Es un Match Mutuo! Ya pueden conversar.",
+                "emisor": emp_id, "nombre_emisor": empleador.get("nombre", "Empleador"),
+                "texto": msg_bienvenida,
                 "hora": datetime.now().strftime("%H:%M")
             }]
         return True
@@ -282,7 +286,6 @@ def get_feed():
                 item["match_score"] = calcular_match(user, o)
                 res.append(item)
     else:
-        # Perfil base de la oferta del empleador para calcular el match con los candidatos
         mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
         oferta_base = mis_ofertas[0] if mis_ofertas else {}
 
@@ -313,7 +316,7 @@ def handle_swipe():
 
     return jsonify({"status": "ok", "is_match": is_match})
 
-# Vistas de Chats y Perfil simplificadas para mantener la navegación intacta
+# --- SISTEMA DE CHAT ---
 @app.route("/chats")
 def vista_chats():
     u = session.get("user_id")
@@ -321,30 +324,161 @@ def vista_chats():
     for chat_key in chats_db:
         if u in chat_key.split("_"):
             otro_id = chat_key.replace(u, "").replace("_", "")
-            mis_chats.append({"nombre": users_db[otro_id]["nombre"]})
+            if otro_id in users_db:
+                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"]})
+            
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
         <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
         <div class="space-y-4">
-            {''.join([f'<div class="bg-gray-900 p-4 rounded-xl border border-gray-800"><h3 class="font-bold">{c["nombre"]}</h3></div>' for c in mis_chats])}
+            {''.join([f'<a href="/chat/{c["id"]}" class="block bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-amber-500 transition"><h3 class="font-bold">{c["nombre"]}</h3><p class="text-xs text-gray-500 mt-1">Toca para abrir chat 💬</p></a>' for c in mis_chats])}
             { '<p class="text-gray-500 text-center">Solo los matches mutuos aparecen aquí.</p>' if not mis_chats else '' }
         </div>
         {NAV_BAR}
     </body></html>"""
     return render_template_string(html)
 
+@app.route("/chat/<target_id>")
+def chat_room(target_id):
+    u = session.get("user_id")
+    if not u or target_id not in users_db: return redirect("/")
+    
+    otro_user = users_db[target_id]
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+    <body class="bg-gray-950 text-white min-h-screen flex flex-col">
+        <div class="bg-gray-900 p-4 flex items-center border-b border-gray-800 sticky top-0 z-50">
+            <button onclick="location.href='/chats'" class="mr-4 text-2xl hover:text-amber-500">⬅</button>
+            <img src="{otro_user['foto']}" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
+            <h2 class="font-bold">{otro_user['nombre']}</h2>
+        </div>
+        <div id="chat-box" class="flex-1 p-4 overflow-y-auto pb-24 space-y-3"></div>
+        
+        <div class="p-3 bg-gray-900 fixed bottom-0 left-0 right-0 border-t border-gray-800 flex gap-2">
+            <input id="msg-input" type="text" placeholder="Escribe un mensaje..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 text-white">
+            <button onclick="sendMessage()" class="bg-amber-500 text-gray-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-400">Enviar</button>
+        </div>
+        
+        <script>
+            const targetId = "{target_id}";
+            const myId = "{u}";
+            
+            async function loadChat() {{
+                let r = await fetch('/api/chat/' + targetId);
+                let msgs = await r.json();
+                let html = msgs.map(m => `
+                    <div class="flex ${{m.emisor === myId ? 'justify-end' : 'justify-start'}}">
+                        <div class="max-w-[75%] rounded-xl px-4 py-2 ${{m.emisor === myId ? 'bg-amber-500 text-gray-950 rounded-br-none' : 'bg-gray-800 text-white rounded-bl-none'}}">
+                            <p class="text-sm">${{m.texto}}</p>
+                            <span class="text-[10px] opacity-70 block text-right mt-1">${{m.hora}}</span>
+                        </div>
+                    </div>
+                `).join('');
+                let box = document.getElementById('chat-box');
+                let scroll = box.scrollHeight - box.scrollTop === box.clientHeight;
+                box.innerHTML = html;
+                if(scroll) box.scrollTo(0, box.scrollHeight);
+            }}
+            
+            async function sendMessage() {{
+                let input = document.getElementById('msg-input');
+                let text = input.value.trim();
+                if(!text) return;
+                input.value = '';
+                
+                await fetch('/api/chat/' + targetId, {{
+                    method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{texto: text}})
+                }});
+                loadChat();
+                setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 100);
+            }}
+            
+            setInterval(loadChat, 2000);
+            loadChat();
+            setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 300);
+        </script>
+    </body></html>"""
+    return render_template_string(html)
+
+@app.route("/api/chat/<target_id>", methods=["GET", "POST"])
+def api_chat(target_id):
+    u = session.get("user_id")
+    chat_key = f"{u}_{target_id}" if f"{u}_{target_id}" in chats_db else f"{target_id}_{u}"
+    
+    if request.method == "POST":
+        if chat_key not in chats_db: chats_db[chat_key] = []
+        chats_db[chat_key].append({
+            "emisor": u,
+            "texto": request.json.get("texto"),
+            "hora": datetime.now().strftime("%H:%M")
+        })
+        return jsonify({"status": "ok"})
+    
+    return jsonify(chats_db.get(chat_key, []))
+
+# --- PERFIL DIVIDIDO Y EDITABLE ---
 @app.route("/perfil")
 def vista_perfil():
-    user = users_db[session.get("user_id")]
+    u = session.get("user_id")
+    user = users_db[u]
+    
+    loc = user.get("ubicacion", {})
+    region_str = loc.get("region", "Sin región registrada")
+    ciudad_str = loc.get("ciudad", "Sin ciudad")
+    
+    extra_html = ""
+    if user["role"] == "empleador":
+        mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
+        ofertas_html = "".join([f'<div class="bg-gray-800 border border-gray-700 p-3 rounded-lg mb-2"><p class="font-bold text-amber-500">{o["empresa"]}</p><p class="text-sm text-gray-300">{o["titulo"]}</p></div>' for o in mis_ofertas])
+        
+        extra_html = f"""
+        <div class="w-full max-w-sm mt-6">
+            <h2 class="font-bold text-lg border-b border-gray-700 pb-2 mb-3">🏢 Mis Empresas / Ofertas</h2>
+            {ofertas_html}
+            
+            <h2 class="font-bold text-lg border-b border-gray-700 pb-2 mt-6 mb-3">⚙️ Configuración de Chat</h2>
+            <div class="bg-gray-800 border border-gray-700 p-4 rounded-lg">
+                <label class="text-xs text-gray-400 font-bold">Mensaje automático de Bienvenida (Match)</label>
+                <textarea id="welcome-msg" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm text-white mt-2 focus:border-amber-500 outline-none" rows="3">{user.get('mensaje_bienvenida', '🎉 ¡Es un Match Mutuo! Ya pueden conversar.')}</textarea>
+                <button onclick="saveWelcomeMsg()" class="w-full mt-3 text-sm bg-amber-500 text-gray-950 py-2 rounded-lg font-bold hover:bg-amber-400">Guardar Mensaje</button>
+                <p id="save-status" class="text-green-500 text-xs text-center mt-2 hidden">¡Mensaje actualizado!</p>
+            </div>
+        </div>
+        
+        <script>
+            async function saveWelcomeMsg() {{
+                let text = document.getElementById('welcome-msg').value;
+                await fetch('/api/update_profile', {{
+                    method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{mensaje_bienvenida: text}})
+                }});
+                document.getElementById('save-status').style.display = 'block';
+                setTimeout(() => document.getElementById('save-status').style.display = 'none', 3000);
+            }}
+        </script>
+        """
+
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
-    <body class="bg-gray-950 text-white min-h-screen p-4 pb-20 flex flex-col items-center pt-10">
-        <img src="{user['foto']}" class="w-28 h-28 rounded-full border-4 border-amber-500 mb-4 object-cover">
-        <h1 class="text-2xl font-bold">{user['nombre']}</h1>
-        <p class="text-amber-500 text-sm mb-4 capitalize">{user['role']}</p>
-        <a href="/logout" class="py-3 px-10 border border-red-500/50 text-red-500 font-bold rounded-xl hover:bg-red-500/10 transition mt-4">Cerrar Sesión</a>
+    <body class="bg-gray-950 text-white min-h-screen p-4 pb-24 flex flex-col items-center pt-10">
+        <img src="{user['foto']}" class="w-28 h-28 rounded-full border-4 border-amber-500 mb-4 object-cover shadow-lg shadow-amber-500/20">
+        <h1 class="text-2xl font-extrabold">{user['nombre']}</h1>
+        <p class="text-amber-500 text-sm mb-1 capitalize font-bold">{user['role']}</p>
+        <p class="text-gray-400 text-sm mb-4">📍 {ciudad_str}, {region_str}</p>
+        
+        {extra_html}
+        
+        <a href="/logout" class="w-full max-w-sm text-center py-3 border border-red-500/50 text-red-500 font-bold rounded-xl hover:bg-red-500/10 transition mt-8">Cerrar Sesión</a>
         {NAV_BAR}
     </body></html>"""
     return render_template_string(html)
+
+@app.route("/api/update_profile", methods=["POST"])
+def update_profile():
+    u = session.get("user_id")
+    if u and u in users_db:
+        users_db[u]["mensaje_bienvenida"] = request.json.get("mensaje_bienvenida", "")
+        return jsonify({"status": "ok"})
+    return jsonify({"error": "Unauthorized"}), 401
 
 @app.route("/logout")
 def logout():
@@ -355,4 +489,3 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-    
