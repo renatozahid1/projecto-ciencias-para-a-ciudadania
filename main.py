@@ -601,34 +601,45 @@ def handle_swipe():
 def vista_chats():
     u = session.get("user_id")
     if not u or u not in users_db: return redirect("/")
-    
+
     mis_chats = []
     for chat_key in chats_db:
         parts = chat_key.split("_")
         if u in parts:
             otro_id = parts[0] if parts[1] == u else parts[1]
             if otro_id in users_db:
-                ultimo_msg = chats_db[chat_key][-1]["texto"] if chats_db[chat_key] else "¡Nuevo match!"
-                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"], "foto": users_db[otro_id].get("foto", ""), "ultimo_msg": ultimo_msg})
-            
+                ultimo_msg = chats_db[chat_key][-1]["texto"] if chats_db[chat_key] else "¡Nuevo chat!"
+                mis_chats.append({
+                    "id": otro_id,
+                    "nombre": users_db[otro_id]["nombre"],
+                    "foto": users_db[otro_id].get("foto", ""),
+                    "ultimo_msg": ultimo_msg
+                })
+
+    if mis_chats:
+        chats_html = "".join([
+            f"""<a href="/chat/{c['id']}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition">
+                <img src="{c['foto']}" onerror="this.src='https://ui-avatars.com/api/?name={c['nombre']}&background=f59e0b&color=fff'" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3">
+                <div class="flex-1 overflow-hidden">
+                    <h3 class="font-bold text-sm">{c['nombre']}</h3>
+                    <p class="text-xs text-gray-400 truncate">{c['ultimo_msg']}</p>
+                </div>
+            </a>""" for c in mis_chats
+        ])
+    else:
+        chats_html = '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas.</p>'
+
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
-    <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
-        <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
-        <div class="space-y-3">
-
-''.join([f"""<a href="/chat/{c['id']}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition">
-    <img src="{c['foto']}" onerror="this.src='https://ui-avatars.com/api/?name={c['nombre']}&background=f59e0b&color=fff'" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3">
-    <div class="flex-1 overflow-hidden">
-        <h3 class="font-bold text-sm">{c['nombre']}</h3>
-        <p class="text-xs text-gray-400 truncate">{c['ultimo_msg']}</p>
+<body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
+    <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
+    <div class="space-y-3">
+        {chats_html}
     </div>
-</a>""" for c in mis_chats])
+    {NAV_BAR}
+</body></html>"""
 
-            { '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas. ¡Desliza en el feed para encontrar matches!</p>' if not mis_chats else '' }
-        </div>
-        {NAV_BAR}
-    </body></html>"""
     return render_template_string(html)
+
 
 @app.route("/chat/<target_id>")
 def chat_room(target_id):
