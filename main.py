@@ -48,8 +48,9 @@ ofertas_db = [
 
 swipes_db = {}
 chats_db = {}
+notificaciones_db = []
 
-# --- LÓGICA DE MATCH ---
+# --- LÓGICA DE MATCH Y NOTIFICACIONES ---
 def calcular_match(cand, emp_oferta):
     if cand.get("edad", 0) < emp_oferta.get("edad_minima", 18):
         return 0.0
@@ -87,20 +88,41 @@ def check_match_mutuo(cand_id, emp_id):
                 "emisor": emp_id, 
                 "nombre_emisor": empleador.get("nombre", "Empleador"),
                 "texto": msg_bienvenida,
-                "hora": datetime.now().strftime("%H:%M")
+                "hora": datetime.now().strftime("%H:%M"),
+                "leido": False
             }]
         return True
     return False
 
-# --- FRONTEND COMPONENTS ---
-NAV_BAR = """
-<nav class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-3 text-xs text-gray-400 z-50">
-    <a href="/feed" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔥</span>Swipe</a>
-    <a href="/chats" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">💬</span>Chats</a>
-    <a href="/perfil" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">👤</span>Perfil</a>
-</nav>
-"""
+def contar_no_leidos(user_id):
+    """Cuenta avisos y mensajes no leídos del usuario activo."""
+    n_notif = sum(1 for n in notificaciones_db if n.get("para") == user_id and not n.get("leido", False))
+    n_mensajes = 0
+    for chat_key, mensajes in chats_db.items():
+        if user_id in chat_key.split("_"):
+            for m in mensajes:
+                if m.get("emisor") != user_id and not m.get("leido", False):
+                    n_mensajes += 1
+    return n_notif, n_mensajes
 
+def get_nav_bar(user_id):
+    """Genera la barra de navegación con contadores dinámicos."""
+    if not user_id:
+        return ""
+    n_notif, n_mensajes = contar_no_leidos(user_id)
+    badge_notif = f'<span class="absolute -top-1 right-2 bg-amber-500 text-gray-950 font-extrabold text-[10px] w-4 h-4 rounded-full flex items-center justify-center border-2 border-gray-900 animate-pulse">{n_notif}</span>' if n_notif > 0 else ''
+    badge_msg = f'<span class="absolute -top-1 right-2 bg-amber-500 text-gray-950 font-extrabold text-[10px] w-4 h-4 rounded-full flex items-center justify-center border-2 border-gray-900 animate-pulse">{n_mensajes}</span>' if n_mensajes > 0 else ''
+
+    return f"""
+    <nav class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-2 text-xs text-gray-400 z-50">
+        <a href="/feed" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔥</span><span class="text-[10px]">Swipe</span></a>
+        <a href="/notificaciones" class="relative flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔔</span>{badge_notif}<span class="text-[10px]">Avisos</span></a>
+        <a href="/chats" class="relative flex flex-col items-center hover:text-amber-500"><span class="text-xl">💬</span>{badge_msg}<span class="text-[10px]">Chats</span></a>
+        <a href="/perfil" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">👤</span><span class="text-[10px]">Perfil</span></a>
+    </nav>
+    """
+
+# --- FRONTEND COMPONENTS ---
 HTML_HEAD = """
 <head>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -313,7 +335,7 @@ HTML_FEED = f"""
         <button onclick="closeMatchScreen()" class="w-full max-w-xs py-4 bg-gray-900 border border-gray-700 text-white font-bold rounded-xl hover:bg-gray-800 transition">Seguir buscando</button>
     </div>
 
-    {NAV_BAR}
+    {{{{ nav_bar|safe }}}}
 
     <script>
     let queue = [];
@@ -522,7 +544,7 @@ def register():
 def vista_feed():
     u = session.get("user_id")
     if not u or u not in users_db: return redirect("/")
-    return render_template_string(HTML_FEED, user=users_db[u])
+    return render_template_string(HTML_FEED, user=users_db[u], nav_bar=get_nav_bar(u))
 
 @app.route("/api/feed", methods=["GET"])
 def get_feed():
@@ -583,7 +605,21 @@ def handle_swipe():
                 if o["id"] == target:
                     emp_id = o["empleador_id"]
                     break
-                    
+        
+        # Enviar notificación al destinatario del 'like'
+        target_user = emp_id if user_role == "candidato" else cand_id
+        if target_user and target_user != u:
+            texto_notif = f"A {users_db.get(u, {}).get('nombre', 'Un usuario')} le interesó tu propuesta / perfil"
+            notificaciones_db.append({
+                "id": len(notificaciones_db) + 1,
+                "para": target_user,
+                "de": u,
+                "texto": texto_notif,
+                "foto": users_db.get(u, {}).get("foto", ""),
+                "leido": False,
+                "hora": datetime.now().strftime("%H:%M")
+            })
+
         is_match = check_match_mutuo(cand_id, emp_id)
         if is_match:
             otro_id = emp_id if user_role == "candidato" else cand_id
@@ -595,6 +631,47 @@ def handle_swipe():
             }
 
     return jsonify({"status": "ok", "is_match": is_match, "match_user": match_user_info})
+
+# --- SISTEMA DE NOTIFICACIONES ---
+@app.route("/notificaciones")
+def vista_notificaciones():
+    u = session.get("user_id")
+    if not u or u not in users_db: return redirect("/")
+
+    mis_notif = [n for n in notificaciones_db if n["para"] == u]
+    mis_notif.reverse()
+
+    # Marcar como leídas
+    for n in mis_notif:
+        n["leido"] = True
+
+    items_html = ""
+    for n in mis_notif:
+        items_html += f"""
+        <div class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 mb-2">
+            <img src="{n['foto']}" onerror="this.src='https://ui-avatars.com/api/?name=U&background=f59e0b&color=fff'" class="w-10 h-10 rounded-full object-cover border border-amber-500 mr-3">
+            <div class="flex-1">
+                <p class="text-sm text-gray-200">{n['texto']}</p>
+                <span class="text-[10px] text-gray-500">{n.get('hora', '')}</span>
+            </div>
+        </div>
+        """
+
+    if not items_html:
+        items_html = '<p class="text-gray-500 text-center py-10">No tienes notificaciones por ahora.</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+<body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
+    <div class="max-w-sm mx-auto">
+        <h1 class="text-2xl font-bold mb-4">🔔 Notificaciones</h1>
+        <div class="space-y-2">
+            {items_html}
+        </div>
+    </div>
+    {get_nav_bar(u)}
+</body></html>"""
+
+    return render_template_string(html)
 
 # --- SISTEMA DE CHAT ---
 @app.route("/chats")
@@ -631,11 +708,13 @@ def vista_chats():
 
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
 <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
-    <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
-    <div class="space-y-3">
-        {chats_html}
+    <div class="max-w-sm mx-auto">
+        <h1 class="text-2xl font-bold mb-4">💬 Mensajes</h1>
+        <div class="space-y-3">
+            {chats_html}
+        </div>
     </div>
-    {NAV_BAR}
+    {get_nav_bar(u)}
 </body></html>"""
 
     return render_template_string(html)
@@ -646,6 +725,13 @@ def chat_room(target_id):
     u = session.get("user_id")
     if not u or u not in users_db or target_id not in users_db: return redirect("/")
     
+    # Marcar los mensajes recibidos como leídos al entrar al chat
+    chat_key = f"{u}_{target_id}" if f"{u}_{target_id}" in chats_db else f"{target_id}_{u}"
+    if chat_key in chats_db:
+        for m in chats_db[chat_key]:
+            if m.get("emisor") != u:
+                m["leido"] = True
+
     otro_user = users_db[target_id]
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen flex flex-col">
@@ -741,11 +827,17 @@ def api_chat(target_id):
         chats_db[chat_key].append({
             "emisor": u,
             "texto": request.json.get("texto"),
-            "hora": datetime.now().strftime("%H:%M")
+            "hora": datetime.now().strftime("%H:%M"),
+            "leido": False
         })
         return jsonify({"status": "ok"})
     
-    return jsonify(chats_db.get(chat_key, []))
+    msgs = chats_db.get(chat_key, [])
+    for m in msgs:
+        if m.get("emisor") != u:
+            m["leido"] = True
+
+    return jsonify(msgs)
 
 # --- PERFIL Y OFERTAS ---
 @app.route("/perfil")
@@ -874,7 +966,7 @@ def vista_perfil():
                 </div>
             </div>
         </div>
-        {NAV_BAR}
+        {get_nav_bar(u)}
 
         <script>
         function convertFileToBase64(fileInput, targetId, previewImgId) {{
