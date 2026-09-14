@@ -615,13 +615,14 @@ def vista_chats():
     <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
         <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
         <div class="space-y-3">
-             ''.join([f"""<a href="/chat/{c['id']}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition">
+''.join([f"""<a href="/chat/{c['id']}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition">
     <img src="{c['foto']}" onerror="this.src='https://ui-avatars.com/api/?name={c['nombre']}&background=f59e0b&color=fff'" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3">
     <div class="flex-1 overflow-hidden">
         <h3 class="font-bold text-sm">{c['nombre']}</h3>
         <p class="text-xs text-gray-400 truncate">{c['ultimo_msg']}</p>
     </div>
 </a>""" for c in mis_chats])
+
 
             { '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas. ¡Desliza en el feed para encontrar matches!</p>' if not mis_chats else '' }
         </div>
