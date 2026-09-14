@@ -46,7 +46,6 @@ ofertas_db = [
     }
 ]
 
-# Registros de Interacción
 swipes_db = {}
 chats_db = {}
 
@@ -74,8 +73,7 @@ def calcular_match(cand, emp_oferta):
     
     return round((0.45 * s_skills + 0.35 * s_dist + 0.20 * s_sal) * 100, 1)
 
-def check_match_mutuo(cand_id, emp_id, job_id=None):
-    # Verifica si el candidato dio like a alguna oferta del empleador o a una en específico
+def check_match_mutuo(cand_id, emp_id):
     mis_ofertas_ids = [o["id"] for o in ofertas_db if o["empleador_id"] == emp_id]
     c_likes_e = any(swipes_db.get((cand_id, j_id)) == "like" for j_id in mis_ofertas_ids)
     e_likes_c = swipes_db.get((emp_id, cand_id)) == "like"
@@ -94,7 +92,7 @@ def check_match_mutuo(cand_id, emp_id, job_id=None):
         return True
     return False
 
-# --- COMPONENTES FRONTEND ---
+# --- FRONTEND COMPONENTS ---
 NAV_BAR = """
 <nav class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-3 text-xs text-gray-400 z-50">
     <a href="/feed" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔥</span>Swipe</a>
@@ -115,8 +113,6 @@ HTML_HEAD = """
     <style>
         .card-drag { transition: transform 0.2s ease, opacity 0.2s ease; cursor: grab; }
         .card-drag:active { cursor: grabbing; transition: none; }
-        .match-overlay { display: none; background: rgba(0,0,0,0.92); z-index: 100; }
-        .modal-bg { display: none; background: rgba(0,0,0,0.85); z-index: 90; }
     </style>
 </head>
 """
@@ -136,14 +132,12 @@ HTML_AUTH = f"""
             <button id="tab-register-btn" onclick="switchTab('register')" class="flex-1 py-2 text-center text-sm font-bold border-b-2 border-transparent text-gray-400 hover:text-white">Registrarse</button>
         </div>
 
-        <!-- FORMULARIO LOGIN -->
         <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
             <input id="login-user" placeholder="Usuario" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
             <input id="login-pwd" type="password" placeholder="Contraseña" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none">
             <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold rounded-xl transition">Iniciar Sesión</button>
         </form>
 
-        <!-- FORMULARIO REGISTRO -->
         <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-3 hidden">
             <div class="flex gap-2">
                 <label class="flex-1 text-center py-2 bg-gray-800 border border-gray-700 rounded-xl cursor-pointer text-xs font-bold text-gray-300 has-[:checked]:border-amber-500 has-[:checked]:text-amber-500">
@@ -161,9 +155,9 @@ HTML_AUTH = f"""
             <textarea id="reg-desc" placeholder="Descripción / Biografía breve" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
 
             <div class="space-y-1">
-                <label class="text-[10px] text-gray-400 font-bold block">Foto de perfil (Subir archivo o pegar enlace)</label>
+                <label class="text-[10px] text-gray-400 font-bold block">Foto de perfil</label>
                 <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'reg-foto-val')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
-                <input id="reg-foto-val" placeholder="O pega enlace de imagen (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
+                <input id="reg-foto-val" placeholder="O pega enlace (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
             </div>
 
             <div class="grid grid-cols-2 gap-2">
@@ -171,7 +165,6 @@ HTML_AUTH = f"""
                 <input id="reg-ciudad" placeholder="Ciudad" required class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
-            <!-- Campos dinámicos Candidato -->
             <div id="cand-fields" class="space-y-2">
                 <div class="grid grid-cols-2 gap-2">
                     <input id="reg-edad" type="number" placeholder="Edad" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
@@ -180,10 +173,9 @@ HTML_AUTH = f"""
                 <input id="reg-skills" placeholder="Habilidades (ej: barberia, atencion)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
-            <!-- Campos dinámicos Empleador -->
             <div id="emp-fields" class="space-y-2 hidden">
                 <input id="reg-contacto" placeholder="Teléfono de contacto" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
-                <input id="reg-job-title" placeholder="Título de tu 1° Oferta (ej: Barbero)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                <input id="reg-job-title" placeholder="Título de tu 1° Oferta" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                 <input id="reg-job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
             </div>
 
@@ -284,12 +276,12 @@ HTML_FEED = f"""
         <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 transition flex items-center justify-center">💚</button>
     </div>
 
-    <!-- Modal Ver Perfil Completo -->
-    <div id="profile-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto">
+    <!-- MODAL VER PERFIL COMPLETO -->
+    <div id="profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto shadow-2xl">
             <button onclick="closeProfileModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
             <div class="text-center mb-4">
-                <img id="m-foto" src="" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                <img id="m-foto" src="" onerror="this.src='https://ui-avatars.com/api/?name=User&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover shadow-lg">
                 <h3 id="m-nombre" class="text-xl font-bold"></h3>
                 <p id="m-subtitulo" class="text-xs text-amber-400 font-medium"></p>
                 <p id="m-ubicacion" class="text-xs text-gray-400 mt-0.5"></p>
@@ -308,16 +300,17 @@ HTML_FEED = f"""
         </div>
     </div>
 
-    <!-- Match Overlay -->
-    <div id="match-screen" class="match-overlay fixed inset-0 flex flex-col justify-center items-center text-center p-6">
+    <!-- MODAL MATCH -->
+    <div id="match-screen" class="fixed inset-0 bg-gray-950/95 backdrop-blur-md z-[100] flex flex-col justify-center items-center text-center p-6 hidden">
         <h1 class="text-5xl font-extrabold text-amber-500 mb-2 font-serif italic">¡Match! 🎉</h1>
-        <p class="text-gray-300 mb-8">El interés es mutuo.</p>
-        <div class="flex gap-4 mb-8">
-            <img src="{{{{ user.foto }}}}" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover">
-            <img id="match-img" src="" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover">
+        <p class="text-gray-300 mb-8" id="match-subtitle">El interés es mutuo.</p>
+        <div class="flex items-center justify-center gap-4 mb-8">
+            <img src="{{{{ user.foto }}}}" onerror="this.src='https://ui-avatars.com/api/?name={{{{ user.nombre }}}}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
+            <span class="text-2xl font-bold text-amber-500">⚡</span>
+            <img id="match-other-img" src="" onerror="this.src='https://ui-avatars.com/api/?name=Match&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
         </div>
-        <button onclick="location.href='/chats'" class="w-full max-w-xs py-4 bg-amber-500 text-gray-950 font-bold rounded-xl mb-3">Ir al Chat</button>
-        <button onclick="document.getElementById('match-screen').style.display='none'; nextCard();" class="w-full max-w-xs py-4 bg-transparent border border-gray-600 text-white font-bold rounded-xl">Seguir buscando</button>
+        <button onclick="goToChat()" class="w-full max-w-xs py-4 bg-amber-500 text-gray-950 font-bold rounded-xl mb-3 shadow-lg hover:bg-amber-400 transition">Ir al Chat</button>
+        <button onclick="closeMatchScreen()" class="w-full max-w-xs py-4 bg-gray-900 border border-gray-700 text-white font-bold rounded-xl hover:bg-gray-800 transition">Seguir buscando</button>
     </div>
 
     {NAV_BAR}
@@ -326,6 +319,7 @@ HTML_FEED = f"""
     let queue = [];
     let currentItem = null;
     let cardEl = null;
+    let currentMatchTargetId = null;
 
     async function loadFeed() {{
         let r = await fetch('/api/feed');
@@ -335,8 +329,13 @@ HTML_FEED = f"""
 
     function renderCard() {{
         const container = document.getElementById('card-container');
-        if (queue.length === 0) {{
-            container.innerHTML = '<div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6"><span class="text-5xl mb-4">📭</span><h3 class="font-bold text-lg">No hay más publicaciones u ofertas por ahora</h3></div>';
+        if (!queue || queue.length === 0) {{
+            container.innerHTML = `
+                <div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6">
+                    <span class="text-5xl mb-4">📭</span>
+                    <h3 class="font-bold text-lg">No hay más publicaciones por ahora</h3>
+                    <p class="text-xs text-gray-400 mt-2">Vuelve más tarde para descubrir nuevas oportunidades.</p>
+                </div>`;
             currentItem = null;
             return;
         }}
@@ -346,9 +345,10 @@ HTML_FEED = f"""
         const sueldo_texto = currentItem.sueldo_ofrecido ? `$${{currentItem.sueldo_ofrecido.toLocaleString('es-CL')}}` : (currentItem.expectativa_renta ? `$${{currentItem.expectativa_renta.toLocaleString('es-CL')}} (Exp)` : '');
         const loc_texto = currentItem.ubicacion ? `${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
         const es_solicitud = currentItem.postulado_a ? `<div class="bg-amber-500 text-gray-950 text-[11px] font-extrabold px-3 py-1 rounded-full mb-2 inline-block shadow-md">⚡ Postuló a tu oferta: ${{currentItem.postulado_a}}</div>` : '';
+        const foto_url = currentItem.foto || 'https://ui-avatars.com/api/?name=PalApp&background=f59e0b&color=fff';
 
         container.innerHTML = `
-            <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{currentItem.foto}}')">
+            <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{foto_url}}')">
                 <div class="mt-auto p-5 relative z-10">
                     ${{es_solicitud}}
                     <div class="flex justify-between items-end mb-2">
@@ -369,20 +369,34 @@ HTML_FEED = f"""
 
     function openProfileModal() {{
         if(!currentItem) return;
-        document.getElementById('m-foto').src = currentItem.foto;
+        const modal = document.getElementById('profile-modal');
+        document.getElementById('m-foto').src = currentItem.foto || 'https://ui-avatars.com/api/?name=User&background=f59e0b&color=fff';
         document.getElementById('m-nombre').innerText = currentItem.titulo || currentItem.nombre;
         document.getElementById('m-subtitulo').innerText = (currentItem.empresa ? currentItem.empresa + ' | ' : '') + (currentItem.sueldo_ofrecido ? '$' + currentItem.sueldo_ofrecido.toLocaleString('es-CL') : (currentItem.expectativa_renta ? '$' + currentItem.expectativa_renta.toLocaleString('es-CL') : ''));
-        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${{currentItem.ubicacion.ciudad}}, ${{currentItem.ubicacion.region}}` : '';
+        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
         document.getElementById('m-desc').innerText = currentItem.descripcion || 'Sin descripción agregada.';
         
         const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-amber-400 text-xs px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
         document.getElementById('m-tags').innerHTML = tags || '<span class="text-gray-500 text-xs">Sin habilidades listadas</span>';
         
-        document.getElementById('profile-modal').style.display = 'flex';
+        modal.classList.remove('hidden');
     }}
 
     function closeProfileModal() {{
-        document.getElementById('profile-modal').style.display = 'none';
+        document.getElementById('profile-modal').classList.add('hidden');
+    }}
+
+    function closeMatchScreen() {{
+        document.getElementById('match-screen').classList.add('hidden');
+        nextCard();
+    }}
+
+    function goToChat() {{
+        if(currentMatchTargetId) {{
+            location.href = '/chat/' + currentMatchTargetId;
+        }} else {{
+            location.href = '/chats';
+        }}
     }}
 
     function setupGestures(el) {{
@@ -411,15 +425,15 @@ HTML_FEED = f"""
     async function action(type) {{
         if (!currentItem) return;
         closeProfileModal();
+        
+        let target_id = currentItem.id;
+
         if(cardEl) {{
             cardEl.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
             const offset = type === 'pass' ? -400 : 400;
             cardEl.style.transform = `translate(${{offset}}px, 0px) rotate(${{offset*0.1}}deg)`;
             cardEl.style.opacity = '0';
         }}
-        
-        let target_id = currentItem.id;
-        setTimeout(() => {{ nextCard(); }}, 300);
 
         let r = await fetch('/api/swipe', {{
             method: 'POST', headers: {{'Content-Type': 'application/json'}},
@@ -427,9 +441,13 @@ HTML_FEED = f"""
         }});
         let res = await r.json();
         
-        if (res.is_match) {{
-            document.getElementById('match-img').src = currentItem.foto;
-            document.getElementById('match-screen').style.display = 'flex';
+        if (res.is_match && res.match_user) {{
+            currentMatchTargetId = res.match_user.id;
+            document.getElementById('match-other-img').src = res.match_user.foto;
+            document.getElementById('match-subtitle').innerText = '¡Tú y ' + res.match_user.nombre + ' se han conectado!';
+            document.getElementById('match-screen').classList.remove('hidden');
+        }} else {{
+            setTimeout(() => {{ nextCard(); }}, 250);
         }}
     }}
 
@@ -529,7 +547,6 @@ def get_feed():
                 item["id"] = cand_id
                 item["match_score"] = calcular_match(cand_data, oferta_base)
                 
-                # Buscar si el candidato postuló a alguna de las ofertas de esta empresa
                 postulado_job = None
                 for o in mis_ofertas:
                     if swipes_db.get((cand_id, o["id"])) == "like":
@@ -545,18 +562,22 @@ def get_feed():
 @app.route("/api/swipe", methods=["POST"])
 def handle_swipe():
     u = session.get("user_id")
+    if not u or u not in users_db:
+        return jsonify({"status": "error", "msg": "No autorizado"}), 401
+
     target = request.json.get("target_id")
     action = request.json.get("type")
     
     swipes_db[(u, target)] = action
     
     is_match = False
+    match_user_info = None
+
     if action == "like":
         user_role = users_db[u]["role"]
         cand_id = u if user_role == "candidato" else target
         emp_id = target if user_role == "candidato" else u
         
-        # Obtener ID del empleador si la oferta fue el target
         if user_role == "candidato":
             for o in ofertas_db:
                 if o["id"] == target:
@@ -564,8 +585,16 @@ def handle_swipe():
                     break
                     
         is_match = check_match_mutuo(cand_id, emp_id)
+        if is_match:
+            otro_id = emp_id if user_role == "candidato" else cand_id
+            otro_data = users_db.get(otro_id, {})
+            match_user_info = {
+                "id": otro_id,
+                "nombre": otro_data.get("nombre", "Usuario"),
+                "foto": otro_data.get("foto") or f"https://ui-avatars.com/api/?name={otro_data.get('nombre','Match')}&background=f59e0b&color=fff"
+            }
 
-    return jsonify({"status": "ok", "is_match": is_match})
+    return jsonify({"status": "ok", "is_match": is_match, "match_user": match_user_info})
 
 # --- SISTEMA DE CHAT ---
 @app.route("/chats")
@@ -580,13 +609,13 @@ def vista_chats():
             otro_id = parts[0] if parts[1] == u else parts[1]
             if otro_id in users_db:
                 ultimo_msg = chats_db[chat_key][-1]["texto"] if chats_db[chat_key] else "¡Nuevo match!"
-                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"], "foto": users_db[otro_id]["foto"], "ultimo_msg": ultimo_msg})
+                mis_chats.append({"id": otro_id, "nombre": users_db[otro_id]["nombre"], "foto": users_db[otro_id].get("foto", ""), "ultimo_msg": ultimo_msg})
             
     html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
     <body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
         <h1 class="text-2xl font-bold mb-4">Mensajes</h1>
         <div class="space-y-3">
-            {''.join([f'<a href="/chat/{c["id"]}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition"><img src="{c["foto"]}" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3"><div class="flex-1 overflow-hidden"><h3 class="font-bold text-sm">{c["nombre"]}</h3><p class="text-xs text-gray-400 truncate">{c["ultimo_msg"]}</p></div></a>' for c in mis_chats])}
+            {''.join([f'<a href="/chat/{c["id"]}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition"><img src="{c["foto"]}" onerror="this.src=\\'https://ui-avatars.com/api/?name={c["nombre"]}&background=f59e0b&color=fff\\'" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3"><div class="flex-1 overflow-hidden"><h3 class="font-bold text-sm">{c["nombre"]}</h3><p class="text-xs text-gray-400 truncate">{c["ultimo_msg"]}</p></div></a>' for c in mis_chats])}
             { '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas. ¡Desliza en el feed para encontrar matches!</p>' if not mis_chats else '' }
         </div>
         {NAV_BAR}
@@ -604,7 +633,7 @@ def chat_room(target_id):
         <div class="bg-gray-900 p-3 flex items-center justify-between border-b border-gray-800 sticky top-0 z-50">
             <div class="flex items-center">
                 <button onclick="location.href='/chats'" class="mr-3 text-xl hover:text-amber-500">⬅</button>
-                <img src="{otro_user['foto']}" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
+                <img src="{otro_user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={otro_user['nombre']}&background=f59e0b&color=fff'" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
                 <div>
                     <h2 class="font-bold text-sm">{otro_user['nombre']}</h2>
                     <span class="text-[10px] text-green-400">● En línea</span>
@@ -614,12 +643,11 @@ def chat_room(target_id):
         </div>
         <div id="chat-box" class="flex-1 p-4 overflow-y-auto pb-24 space-y-3"></div>
 
-        <!-- Modal Ver Perfil desde Chat -->
-        <div id="chat-profile-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
+        <div id="chat-profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 hidden">
             <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto">
                 <button onclick="closeChatProfile()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
                 <div class="text-center mb-4">
-                    <img src="{otro_user['foto']}" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <img src="{otro_user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={otro_user['nombre']}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
                     <h3 class="text-xl font-bold">{otro_user['nombre']}</h3>
                     <p class="text-xs text-amber-400 font-medium">{otro_user.get('contacto', '')}</p>
                     <p class="text-xs text-gray-400 mt-0.5">📍 {otro_user.get('ubicacion', {}).get('ciudad', '')}, {otro_user.get('ubicacion', {}).get('region', '')}</p>
@@ -642,8 +670,8 @@ def chat_room(target_id):
             const targetId = "{target_id}";
             const myId = "{u}";
 
-            function openChatProfile() {{ document.getElementById('chat-profile-modal').style.display = 'flex'; }}
-            function closeChatProfile() {{ document.getElementById('chat-profile-modal').style.display = 'none'; }}
+            function openChatProfile() {{ document.getElementById('chat-profile-modal').classList.remove('hidden'); }}
+            function closeChatProfile() {{ document.getElementById('chat-profile-modal').classList.add('hidden'); }}
             
             async function loadChat() {{
                 let r = await fetch('/api/chat/' + targetId);
@@ -700,7 +728,7 @@ def api_chat(target_id):
     
     return jsonify(chats_db.get(chat_key, []))
 
-# --- PERFIL Y GESTIÓN DE OFERTAS ---
+# --- PERFIL Y OFERTAS ---
 @app.route("/perfil")
 def vista_perfil():
     u = session.get("user_id")
@@ -723,7 +751,7 @@ def vista_perfil():
 
             <form onsubmit="saveProfile(event)" class="space-y-4 bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
                 <div class="text-center mb-4">
-                    <img id="avatar-preview" src="{user.get('foto', '')}" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <img id="avatar-preview" src="{user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={user['nombre']}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
                     <span class="text-xs text-amber-500 font-bold uppercase tracking-wider">{user['role']}</span>
                 </div>
 
@@ -754,7 +782,6 @@ def vista_perfil():
                     </div>
                 </div>
 
-                {"<!-- CAMPOS EDITABLES CANDIDATO -->" if user["role"] == "candidato" else ""}
                 <div class="{'space-y-4' if user['role'] == 'candidato' else 'hidden'}">
                     <div class="grid grid-cols-2 gap-2">
                         <div>
@@ -772,7 +799,6 @@ def vista_perfil():
                     </div>
                 </div>
 
-                {"<!-- CAMPOS EDITABLES EMPLEADOR -->" if user["role"] == "empleador" else ""}
                 <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
                     <div>
                         <label class="text-xs text-gray-400 font-bold">Contacto Telefónico</label>
@@ -788,25 +814,23 @@ def vista_perfil():
                 <p id="save-status" class="text-green-400 text-xs text-center hidden font-bold">¡Perfil actualizado correctamente!</p>
             </form>
 
-            <!-- SECCIÓN PUBLICACIONES DE TRABAJO (SÓLO EMPLEADORES) -->
             <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
                 <div class="flex justify-between items-center mb-2">
                     <h2 class="text-lg font-bold">💼 Mis Ofertas de Trabajo</h2>
                     <button onclick="toggleNewJobForm()" class="text-xs bg-amber-500 text-gray-950 px-3 py-1.5 rounded-lg font-bold hover:bg-amber-400">+ Nueva Oferta</button>
                 </div>
 
-                <!-- FORMULARIO CREAR NUEVA OFERTA -->
                 <form id="new-job-form" onsubmit="createNewJob(event)" class="bg-gray-900 p-4 rounded-2xl border border-gray-800 space-y-3 hidden">
                     <h3 class="text-sm font-bold text-amber-500">Crear Nueva Oferta de Trabajo</h3>
                     <input id="job-title" placeholder="Título del puesto (ej: Barbera/o)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
-                    <textarea id="job-desc" placeholder="Descripción del empleo y funciones" rows="2" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
+                    <textarea id="job-desc" placeholder="Descripción del empleo" rows="2" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
                     <input id="job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                     <input id="job-skills" placeholder="Habilidades requeridas (separadas por coma)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
                     
                     <div class="space-y-1">
                         <label class="text-[10px] text-gray-400 font-bold">Foto del Puesto / Local</label>
                         <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'job-foto-val')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
-                        <input id="job-foto-val" placeholder="O pega enlace de imagen (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
+                        <input id="job-foto-val" placeholder="O pega enlace (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
                     </div>
 
                     <div class="flex gap-2 pt-2">
@@ -815,12 +839,11 @@ def vista_perfil():
                     </div>
                 </form>
 
-                <!-- LISTA DE OFERTAS EXISTENTES -->
                 <div class="space-y-2">
                     {''.join([f'''
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl flex items-center justify-between">
                         <div class="flex items-center space-x-3">
-                            <img src="{o['foto']}" class="w-12 h-12 rounded-lg object-cover border border-gray-700">
+                            <img src="{o['foto']}" onerror="this.src=\\'https://ui-avatars.com/api/?name={o['titulo']}&background=f59e0b&color=fff\\'" class="w-12 h-12 rounded-lg object-cover border border-gray-700">
                             <div>
                                 <h4 class="font-bold text-sm">{o['titulo']}</h4>
                                 <p class="text-xs text-amber-400">${o['sueldo_ofrecido']:,}</p>
