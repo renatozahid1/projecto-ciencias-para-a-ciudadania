@@ -83,6 +83,7 @@ def check_match_mutuo(cand_id, emp_id):
         chat_key = f"{cand_id}_{emp_id}"
         if chat_key not in chats_db:
             empleador = users_db.get(emp_id, {})
+            candidato = users_db.get(cand_id, {})
             msg_bienvenida = empleador.get("mensaje_bienvenida", "🎉 ¡Es un Match Mutuo! Ya pueden conversar.")
             chats_db[chat_key] = [{
                 "emisor": emp_id, 
@@ -91,6 +92,26 @@ def check_match_mutuo(cand_id, emp_id):
                 "hora": datetime.now().strftime("%H:%M"),
                 "leido": False
             }]
+
+            # Avisos de nuevo match
+            notificaciones_db.append({
+                "id": len(notificaciones_db) + 1,
+                "para": cand_id,
+                "de": emp_id,
+                "texto": f"🎉 ¡Tienes un nuevo Match con {empleador.get('nombre', 'un empleador')}!",
+                "foto": empleador.get("foto", ""),
+                "leido": False,
+                "hora": datetime.now().strftime("%H:%M")
+            })
+            notificaciones_db.append({
+                "id": len(notificaciones_db) + 1,
+                "para": emp_id,
+                "de": cand_id,
+                "texto": f"🎉 ¡Tienes un nuevo Match con {candidato.get('nombre', 'un candidato')}!",
+                "foto": candidato.get("foto", ""),
+                "leido": False,
+                "hora": datetime.now().strftime("%H:%M")
+            })
         return True
     return False
 
@@ -564,19 +585,28 @@ def get_feed():
         oferta_base = mis_ofertas[0] if mis_ofertas else {"edad_minima": 18, "habilidades_requeridas": [], "sueldo_ofrecido": 0}
 
         for cand_id, cand_data in users_db.items():
-            if cand_data.get("role") == "candidato" and (u, cand_id) not in swipes_db:
-                item = dict(cand_data)
-                item["id"] = cand_id
-                item["match_score"] = calcular_match(cand_data, oferta_base)
-                
-                postulado_job = None
-                for o in mis_ofertas:
-                    if swipes_db.get((cand_id, o["id"])) == "like":
-                        postulado_job = o["titulo"]
-                        break
-                item["postulado_a"] = postulado_job
-                
-                res.append(item)
+            if cand_data.get("role") == "candidato":
+                # Omitir si ya existe un chat/match entre ambos
+                if f"{cand_id}_{u}" in chats_db or f"{u}_{cand_id}" in chats_db:
+                    continue
+
+                has_postulated = any(swipes_db.get((cand_id, o["id"])) == "like" for o in mis_ofertas)
+                not_swiped = (u, cand_id) not in swipes_db
+
+                if not_swiped or has_postulated:
+                    item = dict(cand_data)
+                    item["id"] = cand_id
+                    item["match_score"] = calcular_match(cand_data, oferta_base)
+                    
+                    postulado_job = None
+                    for o in mis_ofertas:
+                        if swipes_db.get((cand_id, o["id"])) == "like":
+                            postulado_job = o["titulo"]
+                            break
+                    item["postulado_a"] = postulado_job
+                    
+                    if not any(x["id"] == cand_id for x in res):
+                        res.append(item)
                 
     res.sort(key=lambda x: (1 if x.get("postulado_a") else 0, x["match_score"]), reverse=True)
     return jsonify(res)
@@ -1090,6 +1120,12 @@ def create_job():
     }
     
     ofertas_db.append(nueva_oferta)
+
+    # Verificar matches automáticos con postulantes existentes al crear una publicación nueva
+    for cand_id, cand_data in users_db.items():
+        if cand_data.get("role") == "candidato":
+            check_match_mutuo(cand_id, u)
+
     return jsonify({"status": "ok"})
 
 @app.route("/api/delete_job/<job_id>", methods=["DELETE"])
