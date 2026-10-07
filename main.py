@@ -93,7 +93,6 @@ def check_match_mutuo(cand_id, emp_id):
                 "leido": False
             }]
 
-            # Avisos de nuevo match
             notificaciones_db.append({
                 "id": len(notificaciones_db) + 1,
                 "para": cand_id,
@@ -116,7 +115,6 @@ def check_match_mutuo(cand_id, emp_id):
     return False
 
 def contar_no_leidos(user_id):
-    """Cuenta avisos y mensajes no leídos del usuario activo."""
     n_notif = sum(1 for n in notificaciones_db if n.get("para") == user_id and not n.get("leido", False))
     n_mensajes = 0
     for chat_key, mensajes in chats_db.items():
@@ -127,7 +125,6 @@ def contar_no_leidos(user_id):
     return n_notif, n_mensajes
 
 def get_nav_bar(user_id):
-    """Genera la barra de navegación con contadores dinámicos."""
     if not user_id:
         return ""
     n_notif, n_mensajes = contar_no_leidos(user_id)
@@ -143,13 +140,11 @@ def get_nav_bar(user_id):
     </nav>
     """
 
-# --- FRONTEND COMPONENTS ---
+# --- VISTAS FRONTEND ---
 HTML_HEAD = """
 <head>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="theme-color" content="#f59e0b">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.json">
     <title>PalApp</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -319,7 +314,6 @@ HTML_FEED = f"""
         <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 transition flex items-center justify-center">💚</button>
     </div>
 
-    <!-- MODAL VER PERFIL COMPLETO -->
     <div id="profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto shadow-2xl">
             <button onclick="closeProfileModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
@@ -332,7 +326,7 @@ HTML_FEED = f"""
             
             <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
                 <div>
-                <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
                     <p id="m-desc" class="text-gray-200 mt-1 leading-relaxed text-xs bg-gray-950 p-3 rounded-xl border border-gray-800"></p>
                 </div>
                 <div>
@@ -343,7 +337,6 @@ HTML_FEED = f"""
         </div>
     </div>
 
-    <!-- MODAL MATCH -->
     <div id="match-screen" class="fixed inset-0 bg-gray-950/95 backdrop-blur-md z-[100] flex flex-col justify-center items-center text-center p-6 hidden">
         <h1 class="text-5xl font-extrabold text-amber-500 mb-2 font-serif italic">¡Match! 🎉</h1>
         <p class="text-gray-300 mb-8" id="match-subtitle">El interés es mutuo.</p>
@@ -586,7 +579,6 @@ def get_feed():
 
         for cand_id, cand_data in users_db.items():
             if cand_data.get("role") == "candidato":
-                # Omitir si ya existe un chat/match entre ambos
                 if f"{cand_id}_{u}" in chats_db or f"{u}_{cand_id}" in chats_db:
                     continue
 
@@ -636,7 +628,6 @@ def handle_swipe():
                     emp_id = o["empleador_id"]
                     break
         
-        # Enviar notificación al destinatario del 'like'
         target_user = emp_id if user_role == "candidato" else cand_id
         if target_user and target_user != u:
             texto_notif = f"A {users_db.get(u, {}).get('nombre', 'Un usuario')} le interesó tu propuesta / perfil"
@@ -671,7 +662,6 @@ def vista_notificaciones():
     mis_notif = [n for n in notificaciones_db if n["para"] == u]
     mis_notif.reverse()
 
-    # Marcar como leídas
     for n in mis_notif:
         n["leido"] = True
 
@@ -755,7 +745,6 @@ def chat_room(target_id):
     u = session.get("user_id")
     if not u or u not in users_db or target_id not in users_db: return redirect("/")
     
-    # Marcar los mensajes recibidos como leídos al entrar al chat
     chat_key = f"{u}_{target_id}" if f"{u}_{target_id}" in chats_db else f"{target_id}_{u}"
     if chat_key in chats_db:
         for m in chats_db[chat_key]:
@@ -869,7 +858,7 @@ def api_chat(target_id):
 
     return jsonify(msgs)
 
-# --- PERFIL Y OFERTAS ---
+# --- PERFIL Y GESTIÓN DE OFERTAS ---
 @app.route("/perfil")
 def vista_perfil():
     u = session.get("user_id")
@@ -1121,7 +1110,6 @@ def create_job():
     
     ofertas_db.append(nueva_oferta)
 
-    # Verificar matches automáticos con postulantes existentes al crear una publicación nueva
     for cand_id, cand_data in users_db.items():
         if cand_data.get("role") == "candidato":
             check_match_mutuo(cand_id, u)
