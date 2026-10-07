@@ -496,69 +496,400 @@ HTML_FEED = f"""
 # --- RUTAS DE AUTENTICACIÓN Y FEED ---
 @app.route("/")
 def index():
-    if "user_id" in session and session["user_id"] in users_db: 
+    u = session.get("user_id")
+    if u and u in users_db: 
         return redirect("/feed")
-    return render_template_string(HTML_AUTH)
-
-@app.route("/api/login", methods=["POST"])
-def login():
-    data = request.json
-    u, p = data.get("user", "").strip().lower(), data.get("pwd", "").strip()
-    if u in users_db and users_db[u]["pwd"] == p:
-        session["user_id"] = u
-        return jsonify({"status": "ok"})
-    return jsonify({"status": "error", "msg": "Usuario o contraseña incorrectos"}), 401
-
-@app.route("/api/register", methods=["POST"])
-def register():
-    data = request.json
-    u = data.get("user", "").strip().lower()
-    p = data.get("pwd", "").strip()
-    role = data.get("role", "candidato")
-    nombre = data.get("nombre", u).strip()
-    region = data.get("region", "Región Metropolitana").strip()
-    ciudad = data.get("ciudad", "Santiago").strip()
-    foto = data.get("foto") or f"https://ui-avatars.com/api/?name={nombre.replace(' ', '+')}&background=f59e0b&color=fff"
-
-    if not u or not p:
-        return jsonify({"status": "error", "msg": "Complete usuario y contraseña"}), 400
-    if u in users_db:
-        return jsonify({"status": "error", "msg": "El usuario ya se encuentra registrado"}), 400
-
-    users_db[u] = {
-        "pwd": p, "role": role, "nombre": nombre,
-        "descripcion": data.get("descripcion", ""),
-        "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
-        "foto": foto,
-        "edad": int(data.get("edad") or 22) if role == "candidato" else None,
-        "expectativa_renta": int(data.get("expectativa_renta") or 500000) if role == "candidato" else None,
-        "habilidades": [h.strip() for h in data.get("habilidades", "").split(",") if h.strip()] if role == "candidato" else [],
-        "contacto": data.get("contacto", "") if role == "empleador" else None,
-        "mensaje_bienvenida": "¡Hola! Gracias por conectar con nosotros." if role == "empleador" else None
-    }
-
-    if role == "empleador":
-        ofertas_db.append({
-            "id": f"job_{uuid.uuid4().hex[:6]}",
-            "empleador_id": u,
-            "titulo": data.get("titulo_oferta") or "Puesto Vacante",
-            "empresa": nombre,
-            "descripcion": data.get("descripcion", "Únete a nuestro equipo de trabajo."),
-            "edad_minima": 18,
-            "ubicacion": {"lat": -33.4489, "lon": -70.6693, "region": region, "ciudad": ciudad},
-            "habilidades_requeridas": ["atencion_cliente"],
-            "sueldo_ofrecido": int(data.get("sueldo_ofrecido") or 600000),
-            "foto": foto
-        })
-
-    session["user_id"] = u
-    return jsonify({"status": "ok"})
+    return render_template_string(HTML_AUTH, user=None, nav_bar="")
 
 @app.route("/feed")
 def vista_feed():
     u = session.get("user_id")
-    if not u or u not in users_db: return redirect("/")
+    if not u or u not in users_db: 
+        return redirect("/")
     return render_template_string(HTML_FEED, user=users_db[u], nav_bar=get_nav_bar(u))
+
+# --- SISTEMA DE NOTIFICACIONES ---
+@app.route("/notificaciones")
+def vista_notificaciones():
+    u = session.get("user_id")
+    if not u or u not in users_db: 
+        return redirect("/")
+
+    mis_notif = [n for n in notificaciones_db if n["para"] == u]
+    mis_notif.reverse()
+
+    for n in mis_notif:
+        n["leido"] = True
+
+    items_html = ""
+    for n in mis_notif:
+        items_html += f"""
+        <div class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 mb-2">
+            <img src="{n['foto']}" onerror="this.src='https://ui-avatars.com/api/?name=U&background=f59e0b&color=fff'" class="w-10 h-10 rounded-full object-cover border border-amber-500 mr-3">
+            <div class="flex-1">
+                <p class="text-sm text-gray-200">{n['texto']}</p>
+                <span class="text-[10px] text-gray-500">{n.get('hora', '')}</span>
+            </div>
+        </div>
+        """
+
+    if not items_html:
+        items_html = '<p class="text-gray-500 text-center py-10">No tienes notificaciones por ahora.</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+<body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
+    <div class="max-w-sm mx-auto">
+        <h1 class="text-2xl font-bold mb-4">🔔 Notificaciones</h1>
+        <div class="space-y-2">
+            {items_html}
+        </div>
+    </div>
+    {{{{ nav_bar|safe }}}}
+</body></html>"""
+
+    return render_template_string(html, user=users_db[u], nav_bar=get_nav_bar(u))
+
+# --- SISTEMA DE CHAT ---
+@app.route("/chats")
+def vista_chats():
+    u = session.get("user_id")
+    if not u or u not in users_db: 
+        return redirect("/")
+
+    mis_chats = []
+    for chat_key in chats_db:
+        parts = chat_key.split("_")
+        if u in parts:
+            otro_id = parts[0] if parts[1] == u else parts[1]
+            if otro_id in users_db:
+                ultimo_msg = chats_db[chat_key][-1]["texto"] if chats_db[chat_key] else "¡Nuevo chat!"
+                mis_chats.append({
+                    "id": otro_id,
+                    "nombre": users_db[otro_id]["nombre"],
+                    "foto": users_db[otro_id].get("foto", ""),
+                    "ultimo_msg": ultimo_msg
+                })
+
+    if mis_chats:
+        chats_html = "".join([
+            f"""<a href="/chat/{c['id']}" class="flex items-center bg-gray-900 p-3 rounded-xl border border-gray-800 hover:border-amber-500 transition">
+                <img src="{c['foto']}" onerror="this.src='https://ui-avatars.com/api/?name={c['nombre']}&background=f59e0b&color=fff'" class="w-12 h-12 rounded-full object-cover border border-amber-500 mr-3">
+                <div class="flex-1 overflow-hidden">
+                    <h3 class="font-bold text-sm">{c['nombre']}</h3>
+                    <p class="text-xs text-gray-400 truncate">{c['ultimo_msg']}</p>
+                </div>
+            </a>""" for c in mis_chats
+        ])
+    else:
+        chats_html = '<p class="text-gray-500 text-center py-10">No tienes conversaciones activas.</p>'
+
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+<body class="bg-gray-950 text-white min-h-screen p-4 pb-20">
+    <div class="max-w-sm mx-auto">
+        <h1 class="text-2xl font-bold mb-4">💬 Mensajes</h1>
+        <div class="space-y-3">
+            {chats_html}
+        </div>
+    </div>
+    {{{{ nav_bar|safe }}}}
+</body></html>"""
+
+    return render_template_string(html, user=users_db[u], nav_bar=get_nav_bar(u))
+
+@app.route("/chat/<target_id>")
+def chat_room(target_id):
+    u = session.get("user_id")
+    if not u or u not in users_db or target_id not in users_db: 
+        return redirect("/")
+    
+    chat_key = f"{u}_{target_id}" if f"{u}_{target_id}" in chats_db else f"{target_id}_{u}"
+    if chat_key in chats_db:
+        for m in chats_db[chat_key]:
+            if m.get("emisor") != u:
+                m["leido"] = True
+
+    otro_user = users_db[target_id]
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+    <body class="bg-gray-950 text-white min-h-screen flex flex-col">
+        <div class="bg-gray-900 p-3 flex items-center justify-between border-b border-gray-800 sticky top-0 z-50">
+            <div class="flex items-center">
+                <button onclick="location.href='/chats'" class="mr-3 text-xl hover:text-amber-500">⬅</button>
+                <img src="{otro_user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={otro_user['nombre']}&background=f59e0b&color=fff'" class="w-10 h-10 rounded-full mr-3 object-cover border border-amber-500">
+                <div>
+                    <h2 class="font-bold text-sm">{otro_user['nombre']}</h2>
+                    <span class="text-[10px] text-green-400">● En línea</span>
+                </div>
+            </div>
+            <button onclick="openChatProfile()" class="text-xs bg-gray-800 border border-gray-700 text-amber-400 px-3 py-1.5 rounded-lg hover:bg-gray-700 font-bold">👁️ Ver Perfil</button>
+        </div>
+        <div id="chat-box" class="flex-1 p-4 overflow-y-auto pb-24 space-y-3"></div>
+
+        <div id="chat-profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 hidden">
+            <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto">
+                <button onclick="closeChatProfile()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
+                <div class="text-center mb-4">
+                    <img src="{otro_user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={otro_user['nombre']}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <h3 class="text-xl font-bold">{otro_user['nombre']}</h3>
+                    <p class="text-xs text-amber-400 font-medium">{otro_user.get('contacto', '')}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">📍 {otro_user.get('ubicacion', {}).get('ciudad', '')}, {otro_user.get('ubicacion', {}).get('region', '')}</p>
+                </div>
+                <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
+                        <p class="text-gray-200 mt-1 leading-relaxed text-xs bg-gray-950 p-3 rounded-xl border border-gray-800">{otro_user.get('descripcion', 'Sin descripción.')}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <form onsubmit="sendMessage(event)" class="p-3 bg-gray-900 fixed bottom-0 left-0 right-0 border-t border-gray-800 flex gap-2">
+            <input id="msg-input" type="text" placeholder="Escribe un mensaje..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-amber-500 text-white">
+            <button type="submit" class="bg-amber-500 text-gray-950 font-bold px-4 py-2 rounded-xl hover:bg-amber-400">Enviar</button>
+        </form>
+        
+        <script>
+            const targetId = "{target_id}";
+            const myId = "{u}";
+
+            function openChatProfile() {{ document.getElementById('chat-profile-modal').classList.remove('hidden'); }}
+            function closeChatProfile() {{ document.getElementById('chat-profile-modal').classList.add('hidden'); }}
+            
+            async function loadChat() {{
+                let r = await fetch('/api/chat/' + targetId);
+                let msgs = await r.json();
+                let html = msgs.map(m => `
+                    <div class="flex ${{m.emisor === myId ? 'justify-end' : 'justify-start'}}">
+                        <div class="max-w-[78%] rounded-2xl px-4 py-2 text-sm ${{m.emisor === myId ? 'bg-amber-500 text-gray-950 font-medium rounded-br-none' : 'bg-gray-800 text-white rounded-bl-none border border-gray-700'}}">
+                            <p>${{m.texto}}</p>
+                            <span class="text-[9px] opacity-70 block text-right mt-1">${{m.hora}}</span>
+                        </div>
+                    </div>
+                `).join('');
+                let box = document.getElementById('chat-box');
+                box.innerHTML = html;
+            }}
+            
+            async function sendMessage(e) {{
+                e.preventDefault();
+                let input = document.getElementById('msg-input');
+                let text = input.value.trim();
+                if(!text) return;
+                input.value = '';
+                
+                await fetch('/api/chat/' + targetId, {{
+                    method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{texto: text}})
+                }});
+                loadChat();
+                setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 100);
+            }}
+            
+            setInterval(loadChat, 2000);
+            loadChat();
+            setTimeout(() => document.getElementById('chat-box').scrollTo(0, 9999), 200);
+        </script>
+    </body></html>"""
+    return render_template_string(html, user=users_db[u], nav_bar=get_nav_bar(u))
+
+# --- PERFIL Y GESTIÓN DE OFERTAS ---
+@app.route("/perfil")
+def vista_perfil():
+    u = session.get("user_id")
+    if not u or u not in users_db: 
+        return redirect("/")
+    
+    user = users_db[u]
+    loc = user.get("ubicacion", {})
+    region_val = loc.get("region", "")
+    ciudad_val = loc.get("ciudad", "")
+    
+    mis_ofertas = [o for o in ofertas_db if o["empleador_id"] == u]
+
+    html = f"""<!DOCTYPE html><html lang="es">{HTML_HEAD}
+    <body class="bg-gray-950 text-white min-h-screen p-4 pb-24">
+        <div class="max-w-sm mx-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold">👤 Mi Perfil</h1>
+                <a href="/logout" class="text-xs bg-red-500/10 border border-red-500/30 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-500/20 font-bold">Cerrar Sesión</a>
+            </div>
+
+            <form onsubmit="saveProfile(event)" class="space-y-4 bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
+                <div class="text-center mb-4">
+                    <img id="avatar-preview" src="{user.get('foto', '')}" onerror="this.src='https://ui-avatars.com/api/?name={user['nombre']}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover">
+                    <span class="text-xs text-amber-500 font-bold uppercase tracking-wider">{user['role']}</span>
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 font-bold">Nombre Completo / Empresa</label>
+                    <input id="edit-nombre" value="{user.get('nombre', '')}" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="text-xs text-gray-400 font-bold">Descripción / Biografía</label>
+                    <textarea id="edit-desc" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">{user.get('descripcion', '')}</textarea>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs text-gray-400 font-bold">Cambiar Foto de Perfil</label>
+                    <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'edit-foto', 'avatar-preview')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
+                    <input id="edit-foto" value="{user.get('foto', '')}" onchange="document.getElementById('avatar-preview').src=this.value" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs mt-1 focus:border-amber-500 outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Región</label>
+                        <input id="edit-region" value="{region_val}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Ciudad</label>
+                        <input id="edit-ciudad" value="{ciudad_val}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="{'space-y-4' if user['role'] == 'candidato' else 'hidden'}">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Edad</label>
+                            <input id="edit-edad" type="number" value="{user.get('edad', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 font-bold">Expectativa Renta ($)</label>
+                            <input id="edit-renta" type="number" value="{user.get('expectativa_renta', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Habilidades (separadas por coma)</label>
+                        <input id="edit-skills" value="{', '.join(user.get('habilidades', []))}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
+                    <div>
+                        <label class="text-xs text-gray-400 font-bold">Contacto Telefónico</label>
+                        <input id="edit-contacto" value="{user.get('contacto', '')}" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm mt-1 focus:border-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-xs text-amber-500 font-bold">Mensaje de Bienvenida Automático (Match)</label>
+                        <textarea id="edit-welcome" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm mt-1 focus:border-amber-500 outline-none" rows="2">{user.get('mensaje_bienvenida', '')}</textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 bg-amber-500 text-gray-950 font-bold rounded-xl hover:bg-amber-400 transition mt-4">Guardar Cambios</button>
+                <p id="save-status" class="text-green-400 text-xs text-center hidden font-bold">¡Perfil actualizado correctamente!</p>
+            </form>
+
+            <div class="{'space-y-4' if user['role'] == 'empleador' else 'hidden'}">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-lg font-bold">💼 Mis Ofertas de Trabajo</h2>
+                    <button onclick="toggleNewJobForm()" class="text-xs bg-amber-500 text-gray-950 px-3 py-1.5 rounded-lg font-bold hover:bg-amber-400">+ Nueva Oferta</button>
+                </div>
+
+                <form id="new-job-form" onsubmit="createNewJob(event)" class="bg-gray-900 p-4 rounded-2xl border border-gray-800 space-y-3 hidden">
+                    <h3 class="text-sm font-bold text-amber-500">Crear Nueva Oferta de Trabajo</h3>
+                    <input id="job-title" placeholder="Título del puesto (ej: Barbera/o)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    <textarea id="job-desc" placeholder="Descripción del empleo" rows="2" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none"></textarea>
+                    <input id="job-sueldo" type="number" placeholder="Sueldo ofrecido ($)" required class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    <input id="job-skills" placeholder="Habilidades requeridas (separadas por coma)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none">
+                    
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-gray-400 font-bold">Foto del Puesto / Local</label>
+                        <input type="file" accept="image/*" onchange="convertFileToBase64(this, 'job-foto-val')" class="w-full text-xs text-gray-400 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5">
+                        <input id="job-foto-val" placeholder="O pega enlace (URL)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs focus:border-amber-500 outline-none">
+                    </div>
+
+                    <div class="flex gap-2 pt-2">
+                        <button type="submit" class="flex-1 py-2 bg-amber-500 text-gray-950 font-bold rounded-xl text-xs hover:bg-amber-400">Publicar</button>
+                        <button type="button" onclick="toggleNewJobForm()" class="py-2 px-4 bg-gray-800 text-gray-300 font-bold rounded-xl text-xs">Cancelar</button>
+                    </div>
+                </form>
+
+                <div class="space-y-2">
+                    {''.join([f'''
+                    <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="{o['foto']}" onerror="this.src=\\'https://ui-avatars.com/api/?name={o['titulo']}&background=f59e0b&color=fff\\'" class="w-12 h-12 rounded-lg object-cover border border-gray-700">
+                            <div>
+                                <h4 class="font-bold text-sm">{o['titulo']}</h4>
+                                <p class="text-xs text-amber-400">${o['sueldo_ofrecido']:,}</p>
+                            </div>
+                        </div>
+                        <button onclick="deleteJob('{o['id']}')" class="text-xs text-red-400 hover:text-red-300 p-2">🗑️</button>
+                    </div>
+                    ''' for o in mis_ofertas])}
+                </div>
+            </div>
+        </div>
+        {{{{ nav_bar|safe }}}}
+
+        <script>
+        function convertFileToBase64(fileInput, targetId, previewImgId) {{
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {{
+                document.getElementById(targetId).value = e.target.result;
+                if(previewImgId) document.getElementById(previewImgId).src = e.target.result;
+            }};
+            reader.readAsDataURL(file);
+        }}
+
+        function toggleNewJobForm() {{
+            document.getElementById('new-job-form').classList.toggle('hidden');
+        }}
+
+        async function saveProfile(e) {{
+            e.preventDefault();
+            let payload = {{
+                nombre: document.getElementById('edit-nombre').value,
+                descripcion: document.getElementById('edit-desc').value,
+                foto: document.getElementById('edit-foto').value,
+                region: document.getElementById('edit-region').value,
+                ciudad: document.getElementById('edit-ciudad').value,
+                edad: document.getElementById('edit-edad') ? document.getElementById('edit-edad').value : null,
+                expectativa_renta: document.getElementById('edit-renta') ? document.getElementById('edit-renta').value : null,
+                habilidades: document.getElementById('edit-skills') ? document.getElementById('edit-skills').value : null,
+                contacto: document.getElementById('edit-contacto') ? document.getElementById('edit-contacto').value : null,
+                mensaje_bienvenida: document.getElementById('edit-welcome') ? document.getElementById('edit-welcome').value : null
+            }};
+
+            let r = await fetch('/api/update_profile', {{
+                method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify(payload)
+            }});
+            let res = await r.json();
+            if(res.status === 'ok') {{
+                document.getElementById('save-status').classList.remove('hidden');
+                setTimeout(() => document.getElementById('save-status').classList.add('hidden'), 3000);
+            }}
+        }}
+
+        async function createNewJob(e) {{
+            e.preventDefault();
+            let payload = {{
+                titulo: document.getElementById('job-title').value,
+                descripcion: document.getElementById('job-desc').value,
+                sueldo: document.getElementById('job-sueldo').value,
+                habilidades: document.getElementById('job-skills').value,
+                foto: document.getElementById('job-foto-val').value
+            }};
+
+            let r = await fetch('/api/create_job', {{
+                method: 'POST', headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify(payload)
+            }});
+            let res = await r.json();
+            if(res.status === 'ok') location.reload(); else alert(res.msg);
+        }}
+
+        async function deleteJob(jobId) {{
+            if(!confirm('¿Deseas eliminar esta oferta?')) return;
+            let r = await fetch('/api/delete_job/' + jobId, {{ method: 'DELETE' }});
+            let res = await r.json();
+            if(res.status === 'ok') location.reload();
+        }}
+        </script>
+    </body></html>"""
+    return render_template_string(html, user=users_db[u], nav_bar=get_nav_bar(u))
 
 @app.route("/api/feed", methods=["GET"])
 def get_feed():
