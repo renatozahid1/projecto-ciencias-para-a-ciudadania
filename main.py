@@ -510,7 +510,7 @@ def vista_feed():
 
 # --- SISTEMA DE NOTIFICACIONES ---
 @app.route("/notificaciones")
-def vista_notificaciones():
+def render_notificaciones():  # <-- Cambia el nombre aquí
     u = session.get("user_id")
     if not u or u not in users_db: 
         return redirect("/")
@@ -548,6 +548,7 @@ def vista_notificaciones():
 </body></html>"""
 
     return render_template_string(html, user=users_db[u], nav_bar=get_nav_bar(u))
+
 
 # --- SISTEMA DE CHAT ---
 @app.route("/chats")
