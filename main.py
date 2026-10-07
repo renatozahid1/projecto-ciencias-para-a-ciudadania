@@ -464,7 +464,7 @@ HTML_FEED = f"""
 <!DOCTYPE html><html lang="es">{HTML_HEAD}
 <body class="bg-gray-950 text-white min-h-screen pb-20 px-4 pt-6 overflow-hidden select-none">
     <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
-        <h2 class="text-xl font-bold">🔥 Descubrir</h2>
+        <h2 class="text-xl font-bold">&#128293; Descubrir</h2>
         <span class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1 rounded-full text-xs font-bold capitalize font-mono">{{{{ user.role }}}}</span>
     </div>
 
