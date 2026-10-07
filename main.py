@@ -460,9 +460,234 @@ HTML_FEED = f"""
         el.addEventListener('touchstart', e => start(e.touches[0].clientX));
         el.addEventListener('touchmove', e => move(e.touches[0].clientX));
         el.addEventListener('touchend', end);
+HTML_FEED = f"""
+<!DOCTYPE html><html lang="es">{HTML_HEAD}
+<body class="bg-gray-950 text-white min-h-screen pb-20 px-4 pt-6 overflow-hidden select-none">
+    <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">🔥 Descubrir</h2>
+        <span class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1 rounded-full text-xs font-bold capitalize font-mono">{{{{ user.role }}}}</span>
+    </div>
+
+    <!-- Contenedor de Tarjetas Apiladas -->
+    <div class="max-w-sm mx-auto relative h-[65vh]" id="card-container"></div>
+
+    <!-- Controles Inferiores -->
+    <div class="max-w-sm mx-auto flex justify-center gap-6 mt-4 z-20 relative items-center">
+        <button onclick="action('pass')" class="w-16 h-16 bg-gray-900 border-2 border-red-500/50 text-red-500 rounded-full text-3xl shadow-lg hover:bg-red-500/20 active:scale-95 transition flex items-center justify-center">❌</button>
+        <button onclick="openProfileModal()" class="w-12 h-12 bg-gray-800 border border-gray-700 text-amber-400 rounded-full text-xl shadow-md hover:bg-gray-700 active:scale-95 transition flex items-center justify-center">👁️</button>
+        <button onclick="action('like')" class="w-16 h-16 bg-amber-500 text-gray-950 rounded-full text-3xl shadow-lg shadow-amber-500/20 hover:bg-amber-400 active:scale-95 transition flex items-center justify-center">💚</button>
+    </div>
+
+    <!-- MODAL VER PERFIL COMPLETO -->
+    <div id="profile-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-gray-800 w-full max-w-sm rounded-2xl p-5 relative max-h-[85vh] overflow-y-auto shadow-2xl">
+            <button onclick="closeProfileModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">✕</button>
+            <div class="text-center mb-4">
+                <img id="m-foto" src="" onerror="this.src='https://ui-avatars.com/api/?name=User&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 mx-auto mb-2 object-cover shadow-lg">
+                <h3 id="m-nombre" class="text-xl font-bold"></h3>
+                <p id="m-subtitulo" class="text-xs text-amber-400 font-medium"></p>
+                <p id="m-ubicacion" class="text-xs text-gray-400 mt-0.5"></p>
+            </div>
+            
+            <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
+                <div>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
+                    <p id="m-desc" class="text-gray-200 mt-1 leading-relaxed text-xs bg-gray-950 p-3 rounded-xl border border-gray-800"></p>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-1">Habilidades / Requisitos</h4>
+                    <div id="m-tags" class="flex flex-wrap gap-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL MATCH -->
+    <div id="match-screen" class="fixed inset-0 bg-gray-950/95 backdrop-blur-md z-[100] flex flex-col justify-center items-center text-center p-6 hidden">
+        <h1 class="text-5xl font-extrabold text-amber-500 mb-2 font-serif italic animate-bounce">¡Match! 🎉</h1>
+        <p class="text-gray-300 mb-8" id="match-subtitle">El interés es mutuo.</p>
+        <div class="flex items-center justify-center gap-4 mb-8">
+            <img src="{{{{ user.foto }}}}" onerror="this.src='https://ui-avatars.com/api/?name={{{{ user.nombre }}}}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
+            <span class="text-2xl font-bold text-amber-500">⚡</span>
+            <img id="match-other-img" src="" onerror="this.src='https://ui-avatars.com/api/?name=Match&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
+        </div>
+        <button onclick="goToChat()" class="w-full max-w-xs py-4 bg-amber-500 text-gray-950 font-bold rounded-xl mb-3 shadow-lg hover:bg-amber-400 transition">Ir al Chat</button>
+        <button onclick="closeMatchScreen()" class="w-full max-w-xs py-4 bg-gray-900 border border-gray-700 text-white font-bold rounded-xl hover:bg-gray-800 transition">Seguir buscando</button>
+    </div>
+
+    {{{{ nav_bar|safe }}}}
+
+    <script>
+    let queue = [];
+    let currentItem = null;
+    let cardEl = null;
+    let currentMatchTargetId = null;
+
+    async function loadFeed() {{
+        let r = await fetch('/api/feed');
+        queue = await r.json();
+        renderCards();
+    }}
+
+    function createCardHTML(item, isNext = false) {{
+        const tags = (item.habilidades || item.habilidades_requeridas || []).map(h => `<span class="bg-gray-800/80 backdrop-blur-sm text-gray-200 text-[11px] px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
+        const sueldo_texto = item.sueldo_ofrecido ? `$${{item.sueldo_ofrecido.toLocaleString('es-CL')}}` : (item.expectativa_renta ? `$${{item.expectativa_renta.toLocaleString('es-CL')}} (Exp)` : '');
+        const loc_texto = item.ubicacion ? `${{item.ubicacion.ciudad || ''}}, ${{item.ubicacion.region || ''}}` : '';
+        const es_solicitud = item.postulado_a ? `<div class="bg-amber-500 text-gray-950 text-[11px] font-extrabold px-3 py-1 rounded-full mb-2 inline-block shadow-md">⚡ Postuló a tu oferta: ${{item.postulado_a}}</div>` : '';
+        const foto_url = item.foto || 'https://ui-avatars.com/api/?name=PalApp&background=f59e0b&color=fff';
+
+        const stackStyles = isNext 
+            ? 'scale-95 opacity-60 translate-y-3 z-0 pointer-events-none' 
+            ? 'z-10 cursor-grab';
+
+        const idAttr = isNext ? 'id="next-card"' : 'id="swipe-card"';
+
+        return `
+            <div ${{idAttr}} class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center transition-all duration-300 ${{stackStyles}}" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{foto_url}}')">
+                
+                <!-- Sellos de Swipe -->
+                <div id="badge-like" class="absolute top-6 left-6 border-4 border-green-500 text-green-500 font-extrabold text-2xl px-4 py-1 rounded-lg transform -rotate-12 opacity-0 pointer-events-none z-20">ACEPTAR</div>
+                <div id="badge-pass" class="absolute top-6 right-6 border-4 border-red-500 text-red-500 font-extrabold text-2xl px-4 py-1 rounded-lg transform rotate-12 opacity-0 pointer-events-none z-20">PASAR</div>
+
+                <div class="mt-auto p-5 relative z-10">
+                    ${{es_solicitud}}
+                    <div class="flex justify-between items-end mb-2">
+                        <span class="bg-amber-500 text-gray-950 text-xs px-3 py-1 rounded-full font-extrabold shadow-lg">${{item.match_score}}% Match</span>
+                    </div>
+                    <h2 class="text-2xl font-extrabold text-white mb-1">${{item.titulo || item.nombre}} <span class="text-lg font-normal text-gray-300">${{item.edad ? item.edad + ' años' : ''}}</span></h2>
+                    <p class="text-amber-400 font-medium text-sm mb-1">${{item.empresa || item.nombre}} | ${{sueldo_texto}}</p>
+                    <p class="text-gray-300 text-xs mb-2 line-clamp-2">${{item.descripcion || 'Sin descripción.'}}</p>
+                    <p class="text-gray-400 text-xs mb-3">📍 ${{loc_texto}}</p>
+                    <div class="flex flex-wrap gap-1.5">${{tags}}</div>
+                </div>
+            </div>
+        `;
+    }}
+
+    function renderCards() {{
+        const container = document.getElementById('card-container');
+        if (!queue || queue.length === 0) {{
+            container.innerHTML = `
+                <div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6">
+                    <span class="text-5xl mb-4">📭</span>
+                    <h3 class="font-bold text-lg">No hay más publicaciones por ahora</h3>
+                    <p class="text-xs text-gray-400 mt-2">Vuelve más tarde para descubrir nuevas oportunidades.</p>
+                </div>`;
+            currentItem = null;
+            return;
+        }}
+
+        currentItem = queue[0];
+        let html = '';
+
+        // Si hay un elemento siguiente, renderizarlo al fondo
+        if (queue.length > 1) {{
+            html += createCardHTML(queue[1], true);
+        }}
+
+        // Tarjeta Principal arriba
+        html += createCardHTML(queue[0], false);
+
+        container.innerHTML = html;
+        cardEl = document.getElementById('swipe-card');
+        setupGestures(cardEl);
+    }}
+
+    function openProfileModal() {{
+        if(!currentItem) return;
+        const modal = document.getElementById('profile-modal');
+        document.getElementById('m-foto').src = currentItem.foto || 'https://ui-avatars.com/api/?name=User&background=f59e0b&color=fff';
+        document.getElementById('m-nombre').innerText = currentItem.titulo || currentItem.nombre;
+        document.getElementById('m-subtitulo').innerText = (currentItem.empresa ? currentItem.empresa + ' | ' : '') + (currentItem.sueldo_ofrecido ? '$' + currentItem.sueldo_ofrecido.toLocaleString('es-CL') : (currentItem.expectativa_renta ? '$' + currentItem.expectativa_renta.toLocaleString('es-CL') : ''));
+        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
+        document.getElementById('m-desc').innerText = currentItem.descripcion || 'Sin descripción agregada.';
+        
+        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-amber-400 text-xs px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
+        document.getElementById('m-tags').innerHTML = tags || '<span class="text-gray-500 text-xs">Sin habilidades listadas</span>';
+        
+        modal.classList.remove('hidden');
+    }}
+
+    function closeProfileModal() {{
+        document.getElementById('profile-modal').classList.add('hidden');
+    }}
+
+    function closeMatchScreen() {{
+        document.getElementById('match-screen').classList.add('hidden');
+        nextCard();
+    }}
+
+    function goToChat() {{
+        if(currentMatchTargetId) {{
+            location.href = '/chat/' + currentMatchTargetId;
+        }} else {{
+            location.href = '/chats';
+        }}
+    }}
+
+    function setupGestures(el) {{
+        if (!el) return;
+        let isDragging = false, startX = 0, currentX = 0;
+        const badgeLike = el.querySelector('#badge-like');
+        const badgePass = el.querySelector('#badge-pass');
+        const nextCardEl = document.getElementById('next-card');
+
+        const start = (x) => {{ 
+            isDragging = true; 
+            startX = x; 
+            el.style.transition = 'none'; 
+        }};
+
+        const move = (x) => {{
+            if (!isDragging) return;
+            currentX = x - startX;
+            const rot = currentX * 0.08;
+            el.style.transform = `translateX(${{currentX}}px) rotate(${{rot}}deg)`;
+
+            // Revelar sellos
+            const opacity = Math.min(Math.abs(currentX) / 100, 1);
+            if (currentX > 0) {{
+                if (badgeLike) badgeLike.style.opacity = opacity;
+                if (badgePass) badgePass.style.opacity = 0;
+            }} else {{
+                if (badgePass) badgePass.style.opacity = opacity;
+                if (badgeLike) badgeLike.style.opacity = 0;
+            }}
+
+            // Transición suave de la tarjeta trasera
+            if (nextCardEl) {{
+                const scale = Math.min(0.95 + (Math.abs(currentX) / 2000), 1);
+                const opacityNext = Math.min(0.6 + (Math.abs(currentX) / 500), 1);
+                nextCardEl.style.transform = `scale(${{scale}}) translateY(${{12 - Math.abs(currentX)*0.05}}px)`;
+                nextCardEl.style.opacity = opacityNext;
+            }}
+        }};
+
+        const end = () => {{
+            if (!isDragging) return;
+            isDragging = false;
+            if (currentX > 100) action('like');
+            else if (currentX < -100) action('pass');
+            else {{ 
+                el.style.transition = 'transform 0.3s ease'; 
+                el.style.transform = ''; 
+                if (badgeLike) badgeLike.style.opacity = 0;
+                if (badgePass) badgePass.style.opacity = 0;
+                if (nextCardEl) {{
+                    nextCardEl.style.transition = 'all 0.3s ease';
+                    nextCardEl.style.transform = '';
+                    nextCardEl.style.opacity = '0.6';
+                }}
+            }}
+            currentX = 0;
+        }};
+
+        el.addEventListener('touchstart', e => start(e.touches[0].clientX));
+        el.addEventListener('touchmove', e => move(e.touches[0].clientX));
+        el.addEventListener('touchend', end);
         el.addEventListener('mousedown', e => start(e.clientX));
         window.addEventListener('mousemove', e => move(e.clientX));
-        window.addEventListener('mouseup', () => {{ if(isDragging) end(); }});
+        window.addEventListener('mouseup', end);
     }}
 
     async function action(type) {{
@@ -473,9 +698,19 @@ HTML_FEED = f"""
 
         if(cardEl) {{
             cardEl.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
-            const offset = type === 'pass' ? -400 : 400;
-            cardEl.style.transform = `translate(${{offset}}px, 0px) rotate(${{offset*0.1}}deg)`;
+            const offset = type === 'pass' ? -500 : 500;
+            cardEl.style.transform = `translate(${{offset}}px, 0px) rotate(${{offset * 0.08}}deg)`;
             cardEl.style.opacity = '0';
+
+            const badge = cardEl.querySelector(type === 'like' ? '#badge-like' : '#badge-pass');
+            if(badge) badge.style.opacity = '1';
+
+            const nextCardEl = document.getElementById('next-card');
+            if (nextCardEl) {{
+                nextCardEl.style.transition = 'all 0.3s ease';
+                nextCardEl.style.transform = 'scale(1) translateY(0px)';
+                nextCardEl.style.opacity = '1';
+            }}
         }}
 
         let r = await fetch('/api/swipe', {{
@@ -494,7 +729,7 @@ HTML_FEED = f"""
         }}
     }}
 
-    function nextCard() {{ queue.shift(); renderCard(); }}
+    function nextCard() {{ queue.shift(); renderCards(); }}
     loadFeed();
     </script>
 </body></html>
