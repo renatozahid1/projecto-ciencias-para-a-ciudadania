@@ -298,12 +298,23 @@ HTML_AUTH = f"""
 </body></html>
 """
 
-HTML_FEED = f"""
-<!DOCTYPE html><html lang="es">{HTML_HEAD}
+HTML_FEED = """
+<!DOCTYPE html><html lang="es">
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="theme-color" content="#f59e0b">
+    <link rel="manifest" href="/manifest.json">
+    <title>PalApp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card-drag { transition: transform 0.2s ease, opacity 0.2s ease; cursor: grab; }
+        .card-drag:active { cursor: grabbing; transition: none; }
+    </style>
+</head>
 <body class="bg-gray-950 text-white min-h-screen pb-20 px-4 pt-6 overflow-hidden">
     <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
         <h2 class="text-xl font-bold">🔥 Descubrir</h2>
-        <span class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1 rounded-full text-xs font-bold capitalize">{{ user.role }}</span>
+        <span id="user-role-badge" class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1 rounded-full text-xs font-bold capitalize">Candidato</span>
     </div>
 
     <div class="max-w-sm mx-auto relative h-[65vh]" id="card-container"></div>
@@ -323,7 +334,6 @@ HTML_FEED = f"""
                 <p id="m-subtitulo" class="text-xs text-amber-400 font-medium"></p>
                 <p id="m-ubicacion" class="text-xs text-gray-400 mt-0.5"></p>
             </div>
-            
             <div class="space-y-3 text-sm border-t border-gray-800 pt-3">
                 <div>
                     <h4 class="text-xs font-bold text-gray-400 uppercase">Acerca de / Descripción</h4>
@@ -341,7 +351,7 @@ HTML_FEED = f"""
         <h1 class="text-5xl font-extrabold text-amber-500 mb-2 font-serif italic">¡Match! 🎉</h1>
         <p class="text-gray-300 mb-8" id="match-subtitle">El interés es mutuo.</p>
         <div class="flex items-center justify-center gap-4 mb-8">
-            <img src="{{ user.foto }}" onerror="this.src='https://ui-avatars.com/api/?name={{ user.nombre }}&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
+            <img id="match-my-img" src="" onerror="this.src='https://ui-avatars.com/api/?name=Me&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
             <span class="text-2xl font-bold text-amber-500">⚡</span>
             <img id="match-other-img" src="" onerror="this.src='https://ui-avatars.com/api/?name=Match&background=f59e0b&color=fff'" class="w-24 h-24 rounded-full border-4 border-amber-500 object-cover shadow-xl">
         </div>
@@ -349,7 +359,12 @@ HTML_FEED = f"""
         <button onclick="closeMatchScreen()" class="w-full max-w-xs py-4 bg-gray-900 border border-gray-700 text-white font-bold rounded-xl hover:bg-gray-800 transition">Seguir buscando</button>
     </div>
 
-    {{ nav_bar|safe }}
+    <nav class="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around py-2 text-xs text-gray-400 z-50">
+        <a href="/feed" class="flex flex-col items-center text-amber-500 font-bold"><span class="text-xl">🔥</span><span class="text-[10px]">Swipe</span></a>
+        <a href="/notificaciones" class="relative flex flex-col items-center hover:text-amber-500"><span class="text-xl">🔔</span><span class="text-[10px]">Avisos</span></a>
+        <a href="/chats" class="relative flex flex-col items-center hover:text-amber-500"><span class="text-xl">💬</span><span class="text-[10px]">Chats</span></a>
+        <a href="/perfil" class="flex flex-col items-center hover:text-amber-500"><span class="text-xl">👤</span><span class="text-[10px]">Perfil</span></a>
+    </nav>
 
     <script>
     let queue = [];
@@ -357,15 +372,15 @@ HTML_FEED = f"""
     let cardEl = null;
     let currentMatchTargetId = null;
 
-    async function loadFeed() {{
+    async function loadFeed() {
         let r = await fetch('/api/feed');
         queue = await r.json();
         renderCard();
-    }}
+    }
 
-    function renderCard() {{
+    function renderCard() {
         const container = document.getElementById('card-container');
-        if (!queue || queue.length === 0) {{
+        if (!queue || queue.length === 0) {
             container.innerHTML = `
                 <div class="h-full bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6">
                     <span class="text-5xl mb-4">📭</span>
@@ -374,120 +389,120 @@ HTML_FEED = f"""
                 </div>`;
             currentItem = null;
             return;
-        }}
+        }
 
         currentItem = queue[0];
-        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800/80 backdrop-blur-sm text-gray-200 text-[11px] px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
-        const sueldo_texto = currentItem.sueldo_ofrecido ? `$${{currentItem.sueldo_ofrecido.toLocaleString('es-CL')}}` : (currentItem.expectativa_renta ? `$${{currentItem.expectativa_renta.toLocaleString('es-CL')}} (Exp)` : '');
-        const loc_texto = currentItem.ubicacion ? `${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
-        const es_solicitud = currentItem.postulado_a ? `<div class="bg-amber-500 text-gray-950 text-[11px] font-extrabold px-3 py-1 rounded-full mb-2 inline-block shadow-md">⚡ Postuló a tu oferta: ${{currentItem.postulado_a}}</div>` : '';
+        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800/80 backdrop-blur-sm text-gray-200 text-[11px] px-2.5 py-1 rounded-md border border-gray-700">#${h}</span>`).join(' ');
+        const sueldo_texto = currentItem.sueldo_ofrecido ? `$${currentItem.sueldo_ofrecido.toLocaleString('es-CL')}` : (currentItem.expectativa_renta ? `$${currentItem.expectativa_renta.toLocaleString('es-CL')} (Exp)` : '');
+        const loc_texto = currentItem.ubicacion ? `${currentItem.ubicacion.ciudad || ''}, ${currentItem.ubicacion.region || ''}` : '';
+        const es_solicitud = currentItem.postulado_a ? `<div class="bg-amber-500 text-gray-950 text-[11px] font-extrabold px-3 py-1 rounded-full mb-2 inline-block shadow-md">⚡ Postuló a tu oferta: ${currentItem.postulado_a}</div>` : '';
         const foto_url = currentItem.foto || 'https://ui-avatars.com/api/?name=PalApp&background=f59e0b&color=fff';
 
         container.innerHTML = `
-            <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${{foto_url}}')">
+            <div id="swipe-card" class="card-drag absolute inset-0 bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden flex flex-col bg-cover bg-center" style="background-image: linear-gradient(to top, rgba(3,7,18,1) 0%, rgba(3,7,18,0.7) 40%, rgba(3,7,18,0) 100%), url('${foto_url}')">
                 <div class="mt-auto p-5 relative z-10">
-                    ${{es_solicitud}}
+                    ${es_solicitud}
                     <div class="flex justify-between items-end mb-2">
-                        <span class="bg-amber-500 text-gray-950 text-xs px-3 py-1 rounded-full font-extrabold shadow-lg">${{currentItem.match_score}}% Match</span>
+                        <span class="bg-amber-500 text-gray-950 text-xs px-3 py-1 rounded-full font-extrabold shadow-lg">${currentItem.match_score}% Match</span>
                     </div>
-                    <h2 class="text-2xl font-extrabold text-white mb-1">${{currentItem.titulo || currentItem.nombre}} <span class="text-lg font-normal text-gray-300">${{currentItem.edad ? currentItem.edad + ' años' : ''}}</span></h2>
-                    <p class="text-amber-400 font-medium text-sm mb-1">${{currentItem.empresa || currentItem.nombre}} | ${{sueldo_texto}}</p>
-                    <p class="text-gray-300 text-xs mb-2 line-clamp-2">${{currentItem.descripcion || 'Sin descripción.'}}</p>
-                    <p class="text-gray-400 text-xs mb-3">📍 ${{loc_texto}}</p>
-                    <div class="flex flex-wrap gap-1.5">${{tags}}</div>
+                    <h2 class="text-2xl font-extrabold text-white mb-1">${currentItem.titulo || currentItem.nombre} <span class="text-lg font-normal text-gray-300">${currentItem.edad ? currentItem.edad + ' años' : ''}</span></h2>
+                    <p class="text-amber-400 font-medium text-sm mb-1">${currentItem.empresa || currentItem.nombre} | ${sueldo_texto}</p>
+                    <p class="text-gray-300 text-xs mb-2 line-clamp-2">${currentItem.descripcion || 'Sin descripción.'}</p>
+                    <p class="text-gray-400 text-xs mb-3">📍 ${loc_texto}</p>
+                    <div class="flex flex-wrap gap-1.5">${tags}</div>
                 </div>
             </div>
         `;
         
         cardEl = document.getElementById('swipe-card');
         setupGestures(cardEl);
-    }}
+    }
 
-    function openProfileModal() {{
+    function openProfileModal() {
         if(!currentItem) return;
         const modal = document.getElementById('profile-modal');
         document.getElementById('m-foto').src = currentItem.foto || 'https://ui-avatars.com/api/?name=User&background=f59e0b&color=fff';
         document.getElementById('m-nombre').innerText = currentItem.titulo || currentItem.nombre;
         document.getElementById('m-subtitulo').innerText = (currentItem.empresa ? currentItem.empresa + ' | ' : '') + (currentItem.sueldo_ofrecido ? '$' + currentItem.sueldo_ofrecido.toLocaleString('es-CL') : (currentItem.expectativa_renta ? '$' + currentItem.expectativa_renta.toLocaleString('es-CL') : ''));
-        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${{currentItem.ubicacion.ciudad || ''}}, ${{currentItem.ubicacion.region || ''}}` : '';
+        document.getElementById('m-ubicacion').innerText = currentItem.ubicacion ? `📍 ${currentItem.ubicacion.ciudad || ''}, ${currentItem.ubicacion.region || ''}` : '';
         document.getElementById('m-desc').innerText = currentItem.descripcion || 'Sin descripción agregada.';
         
-        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-amber-400 text-xs px-2.5 py-1 rounded-md border border-gray-700">#${{h}}</span>`).join(' ');
+        const tags = (currentItem.habilidades || currentItem.habilidades_requeridas || []).map(h => `<span class="bg-gray-800 text-amber-400 text-xs px-2.5 py-1 rounded-md border border-gray-700">#${h}</span>`).join(' ');
         document.getElementById('m-tags').innerHTML = tags || '<span class="text-gray-500 text-xs">Sin habilidades listadas</span>';
         
         modal.classList.remove('hidden');
-    }}
+    }
 
-    function closeProfileModal() {{
+    function closeProfileModal() {
         document.getElementById('profile-modal').classList.add('hidden');
-    }}
+    }
 
-    function closeMatchScreen() {{
+    function closeMatchScreen() {
         document.getElementById('match-screen').classList.add('hidden');
         nextCard();
-    }}
+    }
 
-    function goToChat() {{
-        if(currentMatchTargetId) {{
+    function goToChat() {
+        if(currentMatchTargetId) {
             location.href = '/chat/' + currentMatchTargetId;
-        }} else {{
+        } else {
             location.href = '/chats';
-        }}
-    }}
+        }
+    }
 
-    function setupGestures(el) {{
+    function setupGestures(el) {
         let isDragging = false, startX = 0, currentX = 0;
-        const start = (x) => {{ isDragging = true; startX = x; el.style.transition = 'none'; }};
-        const move = (x) => {{
+        const start = (x) => { isDragging = true; startX = x; el.style.transition = 'none'; };
+        const move = (x) => {
             if (!isDragging) return;
             currentX = x - startX;
-            el.style.transform = `translateX(${{currentX}}px) rotate(${{currentX * 0.05}}deg)`;
-        }};
-        const end = () => {{
+            el.style.transform = `translateX(${currentX}px) rotate(${currentX * 0.05}deg)`;
+        };
+        const end = () => {
             isDragging = false;
             if (currentX > 100) action('like');
             else if (currentX < -100) action('pass');
-            else {{ el.style.transition = 'transform 0.3s ease'; el.style.transform = ''; }}
+            else { el.style.transition = 'transform 0.3s ease'; el.style.transform = ''; }
             currentX = 0;
-        }};
+        };
         el.addEventListener('touchstart', e => start(e.touches[0].clientX));
         el.addEventListener('touchmove', e => move(e.touches[0].clientX));
         el.addEventListener('touchend', end);
         el.addEventListener('mousedown', e => start(e.clientX));
         window.addEventListener('mousemove', e => move(e.clientX));
-        window.addEventListener('mouseup', () => {{ if(isDragging) end(); }});
-    }}
+        window.addEventListener('mouseup', () => { if(isDragging) end(); });
+    }
 
-    async function action(type) {{
+    async function action(type) {
         if (!currentItem) return;
         closeProfileModal();
         
         let target_id = currentItem.id;
 
-        if(cardEl) {{
+        if(cardEl) {
             cardEl.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
             const offset = type === 'pass' ? -400 : 400;
-            cardEl.style.transform = `translate(${{offset}}px, 0px) rotate(${{offset*0.1}}deg)`;
+            cardEl.style.transform = `translate(${offset}px, 0px) rotate(${offset*0.1}deg)`;
             cardEl.style.opacity = '0';
-        }}
+        }
 
-        let r = await fetch('/api/swipe', {{
-            method: 'POST', headers: {{'Content-Type': 'application/json'}},
-            body: JSON.stringify({{target_id: target_id, type: type}})
-        }});
+        let r = await fetch('/api/swipe', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target_id: target_id, type: type})
+        });
         let res = await r.json();
         
-        if (res.is_match && res.match_user) {{
+        if (res.is_match && res.match_user) {
             currentMatchTargetId = res.match_user.id;
             document.getElementById('match-other-img').src = res.match_user.foto;
             document.getElementById('match-subtitle').innerText = '¡Tú y ' + res.match_user.nombre + ' se han conectado!';
             document.getElementById('match-screen').classList.remove('hidden');
-        }} else {{
-            setTimeout(() => {{ nextCard(); }}, 250);
-        }}
-    }}
+        } else {
+            setTimeout(() => { nextCard(); }, 250);
+        }
+    }
 
-    function nextCard() {{ queue.shift(); renderCard(); }}
+    function nextCard() { queue.shift(); renderCard(); }
     loadFeed();
     </script>
 </body></html>
@@ -559,8 +574,8 @@ def register():
 def vista_feed():
     u = session.get("user_id")
     if not u or u not in users_db: return redirect("/")
-    return render_template_string(HTML_FEED, user=users_db[u], nav_bar=get_nav_bar(u))
-
+    return render_template_string(HTML_FEED)
+    
 @app.route("/api/feed", methods=["GET"])
 def get_feed():
     u = session.get("user_id")
